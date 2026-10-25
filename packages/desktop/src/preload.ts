@@ -86,7 +86,12 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       ipcRenderer.invoke("paseo:dialog:askWithCheckbox", message, options),
     open: (options?: Record<string, unknown>) => ipcRenderer.invoke("paseo:dialog:open", options),
   },
+  simulator: {
+    open: () => ipcRenderer.invoke("paseo:simulator:open"),
+  },
   notification: {
+    playCompletionSound: (eventKey: string) =>
+      ipcRenderer.invoke("paseo:notification:completion", eventKey),
     isSupported: () => ipcRenderer.invoke("paseo:notification:isSupported"),
     sendNotification: (payload: { title: string; body?: string; data?: Record<string, unknown> }) =>
       ipcRenderer.invoke("paseo:notification:send", payload),

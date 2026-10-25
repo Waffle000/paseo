@@ -2,6 +2,11 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const playFile = promisify(execFile);
+const completedSounds = new Set<string>();
 
 interface NotificationInput {
   title?: unknown;
@@ -79,6 +84,24 @@ export function ensureNotificationCenterRegistration(): void {
 }
 
 export function registerNotificationHandlers(): void {
+  ipcMain.handle("paseo:notification:completion", async (_event, eventKey: unknown) => {
+    if (typeof eventKey !== "string" || eventKey.length === 0 || eventKey.length > 512) {
+      throw new Error("Invalid completion event identity.");
+    }
+    const settings = await getDesktopSettingsStore().get();
+    if (!settings.notifications.playSound) return false;
+    if (completedSounds.has(eventKey)) return false;
+    completedSounds.add(eventKey);
+    if (completedSounds.size > 512) {
+      const oldest = completedSounds.values().next().value;
+      if (oldest !== undefined) completedSounds.delete(oldest);
+    }
+    if (process.platform === "darwin") {
+      await playFile("/usr/bin/afplay", ["/System/Library/Sounds/Glass.aiff"]);
+      return true;
+    }
+    return false;
+  });
   ipcMain.handle("paseo:notification:isSupported", () => {
     return Notification.isSupported();
   });
@@ -97,11 +120,12 @@ export function registerNotificationHandlers(): void {
     const data = toRecord(rawInput?.data);
     const icon = getNotificationIcon();
     const settings = await getDesktopSettingsStore().get();
+    const customCompletionSound = process.platform === "darwin" && data?.reason === "finished";
     const notification = new Notification({
       title,
       ...(body ? { body } : {}),
       ...(icon ? { icon } : {}),
-      silent: !settings.notifications.playSound,
+      silent: customCompletionSound || !settings.notifications.playSound,
     });
 
     activeNotifications.add(notification);

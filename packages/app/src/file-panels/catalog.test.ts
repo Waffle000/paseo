@@ -67,6 +67,15 @@ describe("built-in file panels", () => {
     expect(candidateIds({ path: "archive.zip", kind: "binary" })).toEqual([]);
   });
 
+  it("renders binary PDF and video files without treating archives as media", () => {
+    expect(panelId({ path: "reports/Investor.PDF", kind: "binary" })).toBe("builtin:pdf");
+    for (const extension of ["mp4", "m4v", "mov", "webm", "ogv"]) {
+      expect(panelId({ path: `clips/demo.${extension}`, kind: "binary" })).toBe("builtin:video");
+    }
+    expect(panelId({ path: "archive.pdf.zip", kind: "binary" })).toBeNull();
+    expect(panelId({ path: "README.mp4", kind: "text" })).toBe("builtin:source");
+  });
+
   it.each(["png", "jpg", "jpeg", "gif", "webp", "svg"])(
     "registers the image extension %s",
     (extension) => {

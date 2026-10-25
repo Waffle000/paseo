@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { Globe, SquarePen, SquareTerminal } from "lucide-react-native";
+import { Globe, Smartphone, SquarePen, SquareTerminal } from "lucide-react-native";
 import invariant from "tiny-invariant";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -42,6 +42,7 @@ export interface NewTabLauncher {
   showChanges: boolean;
   showPullRequest: boolean;
   showBrowser: boolean;
+  showSimulator?: boolean;
   terminalDisabled: boolean;
   launch: (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => void;
 }
@@ -85,6 +86,7 @@ const BUILT_IN_SELECTIONS = {
   diff: { kind: "target", target: { kind: "working_diff" } },
   files: { kind: "target", target: { kind: "files" } },
   browser: { kind: "browser" },
+  simulator: { kind: "simulator" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
 
@@ -183,6 +185,15 @@ export function useWorkspaceTabLaunchCatalog(input: {
         panelKind: "browser",
         hidden: !launcher.showBrowser,
         launch: launchSelection(BUILT_IN_SELECTIONS.browser),
+      },
+      simulator: {
+        id: "simulator",
+        label: t("workspace.tabs.fallback.simulator"),
+        Icon: Smartphone,
+        disabled: false,
+        panelKind: "browser",
+        hidden: !launcher.showSimulator,
+        launch: launchSelection(BUILT_IN_SELECTIONS.simulator),
       },
       pullRequest: {
         id: "pull-request",

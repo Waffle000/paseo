@@ -10,6 +10,8 @@ import { FileMarkdownPreview } from "./markdown-preview";
 import type { BuiltinFilePanelProps } from "./panels";
 import { TextFilePanel, type TextFilePreviewProps } from "./source/panel";
 import type { RenderingFilePanel, SourceFilePanel } from "./catalog";
+import { DocumentFrame } from "./document-frame";
+import { VideoFilePanel } from "./video";
 
 /** Source: the text file panel with no Preview, for text files no other built-in panel claims. */
 function SourcePanel(props: BuiltinFilePanelProps) {
@@ -65,6 +67,13 @@ function ImagePanel({ file }: BuiltinFilePanelProps) {
   return <ZoomableImage uri={url.url} testID="image-file-preview" />;
 }
 
+function PdfPanel({ file }: BuiltinFilePanelProps) {
+  const url = useFileUrl(file);
+  if (url.status === "loading") return <FilePanelLoading />;
+  if (url.status === "error") return <FilePanelError message={url.error.message} />;
+  return <DocumentFrame url={url.url} testID="pdf-file-preview" />;
+}
+
 function FilePanelError({ message }: { message: string }) {
   return (
     <View style={styles.centerState}>
@@ -77,6 +86,8 @@ const components = {
   "builtin:markdown": MarkdownPanel,
   "builtin:html": HtmlPanel,
   "builtin:image": ImagePanel,
+  "builtin:pdf": PdfPanel,
+  "builtin:video": VideoFilePanel,
   "builtin:source": SourcePanel,
 };
 

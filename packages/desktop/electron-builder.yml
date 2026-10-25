@@ -35,17 +35,26 @@ extraResources:
     to: app-dist
   - from: assets/editor-targets
     to: editor-target-icons
+  - from: ../../node_modules/serve-sim
+    to: serve-sim
+  - from: bin/paseo-simq-backend
+    to: bin/paseo-simq-backend
+  - from: scripts/simq-backend.mjs
+    to: bin/simq-backend.mjs
 publish:
   provider: github
-  owner: getpaseo
+  owner: Waffle000
   repo: paseo
 mac:
   artifactName: "Paseo-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
-  hardenedRuntime: true
-  notarize: true
+  # Ad-hoc local builds have no Team ID for hardened library validation.
+  hardenedRuntime: false
+  # Public distribution needs a Developer ID, hardened runtime and notarization.
+  identity: "-"
+  notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
   extraResources:

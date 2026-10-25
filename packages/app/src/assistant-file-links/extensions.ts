@@ -1,4 +1,20 @@
+export const ASSISTANT_MEDIA_EXTENSIONS = [
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "mp4",
+  "m4v",
+  "mov",
+  "webm",
+  "ogv",
+] as const;
+
 export const ASSISTANT_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...ASSISTANT_MEDIA_EXTENSIONS,
   "astro",
   "bash",
   "c",
@@ -55,3 +71,8 @@ export const ASSISTANT_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
   "yml",
   "zsh",
 ]);
+
+export function isAssistantMediaPath(path: string): boolean {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  return ASSISTANT_MEDIA_EXTENSIONS.some((candidate) => candidate === extension);
+}

@@ -4,6 +4,7 @@ import {
   createInlinePathOpener,
   type InlinePathTarget,
 } from "@/assistant-file-links";
+import { isAssistantMediaPath } from "@/assistant-file-links/extensions";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import type { LayoutChangeEvent } from "react-native";
@@ -1886,10 +1887,25 @@ function WorkspaceScreenContent({
         });
         return;
       }
+      if (selection.kind === "simulator") {
+        const simulator = getDesktopHost()?.simulator;
+        if (!simulator) return;
+        void simulator
+          .open()
+          .then((url) => {
+            const { browserId } = createWorkspaceBrowser({ initialUrl: url });
+            openTarget({ kind: "browser", browserId });
+            return browserId;
+          })
+          .catch((error: unknown) =>
+            toast.error(error instanceof Error ? error.message : String(error)),
+          );
+        return;
+      }
       const { browserId } = createWorkspaceBrowser();
       openTarget({ kind: "browser", browserId });
     },
-    [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget],
+    [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget, toast],
   );
 
   const handleOpenUrlInBrowserTab = useCallback(
@@ -1905,6 +1921,10 @@ function WorkspaceScreenContent({
       );
     },
     [openWorkspaceTabFocused, persistenceKey],
+  );
+  const openWorkspaceUrl = useMemo(
+    () => (getIsElectron() ? handleOpenUrlInBrowserTab : undefined),
+    [handleOpenUrlInBrowserTab],
   );
 
   useDesktopBrowserNewTabRequests({
@@ -3285,6 +3305,7 @@ function WorkspaceScreenContent({
       showChanges: isGitCheckout,
       showPullRequest: hasPullRequest,
       showBrowser: showCreateBrowserTab,
+      showSimulator: Boolean(getDesktopHost()?.simulator),
       terminalDisabled: createTerminalDisabled,
       launch: launchWorkspaceTab,
     }),
@@ -3698,6 +3719,10 @@ function WorkspaceScreenContent({
     workspaceRoot: workspaceDirectory,
   });
   const openMarkdownFile = useStableEvent((location: WorkspaceFileLocation) => {
+    if (isAssistantMediaPath(location.path)) {
+      handleOpenFileFromChat(location, activeTabId);
+      return;
+    }
     handleOpenPreferredAssistantFile({ location, parentTabId: activeTabId });
   });
   const openMarkdownDirectory = useStableEvent((directoryPath: string) => {
@@ -3790,6 +3815,7 @@ function WorkspaceScreenContent({
         serverId={normalizedServerId}
         workspaceRoot={workspaceDirectory ?? undefined}
         onOpenWorkspaceFile={openMarkdownPath}
+        onOpenWorkspaceUrl={openWorkspaceUrl}
         toast={toast}
       >
         {renderedWorkspaceScreen}

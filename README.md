@@ -1,3 +1,9 @@
+> Personal macOS fork: PDF/video/image file tabs, in-workspace agent links, Device Simulator preview, and an agent completion chime. Automatic updates are disabled; update this build from `Waffle000/paseo`. The existing daemon home and desktop app identity are preserved for installation over Paseo. Simulator previews run locally; this does not add emulator controls to the official phone client.
+
+> iOS uses the existing `~/.local/bin/simq` queue and its approved device. Boot the approved simulator in Xcode before connecting; blocked/paused queues require explicit human recovery. Android requires Android SDK platform-tools and an available device or AVD. Preview refresh is screenshot-based and pauses while hidden; it is not a 60-FPS video stream. Neither disconnecting the preview nor closing its tab shuts down your device.
+
+> Local macOS builds are ad-hoc signed, not notarized, and do not enable hardened runtime. Android AVDs require a complete installed system image (including `system.img`); an AVD entry alone is not sufficient to boot a preview.
+
 <p align="center">
   <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
 </p>

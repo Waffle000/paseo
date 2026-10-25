@@ -37,6 +37,7 @@ import {
   type SessionState,
 } from "@/stores/session-store";
 import { sendOsNotification } from "@/utils/os-notifications";
+import { getDesktopHost } from "@/desktop/host";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
   getInitKey,
@@ -71,6 +72,11 @@ interface BufferedAudioChunk {
 
 function decodeBase64Chunk(base64: string): Uint8Array {
   return Buffer.from(base64, "base64");
+}
+
+function playAgentCompletionSound(eventKey: string): void {
+  const play = getDesktopHost()?.notification?.playCompletionSound;
+  if (play) void play(eventKey).catch(console.error);
 }
 
 function buildAudioPlaybackSource(chunks: BufferedAudioChunk[]): AudioPlaybackSource {
@@ -267,18 +273,17 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (params.reason === "error") {
         return;
       }
-      const isActivelyVisible = getIsAppActivelyVisible(appState);
-      const isAwayFromAgent = !isActivelyVisible || attentionFocusedAgentId !== params.agentId;
-      if (!isAwayFromAgent) {
-        return;
-      }
-
       const timestampMs = new Date(params.timestamp).getTime();
       const lastNotified = attentionNotifiedRef.current.get(params.agentId);
-      if (lastNotified && lastNotified >= timestampMs) {
-        return;
-      }
+      if (lastNotified && lastNotified >= timestampMs) return;
       attentionNotifiedRef.current.set(params.agentId, timestampMs);
+
+      if (params.reason === "finished") {
+        playAgentCompletionSound(`${serverId}:${params.agentId}:${params.timestamp}`);
+      }
+      const isActivelyVisible = getIsAppActivelyVisible(appState);
+      const isAwayFromAgent = !isActivelyVisible || attentionFocusedAgentId !== params.agentId;
+      if (!isAwayFromAgent) return;
 
       const head = session?.agentStreamHead.get(params.agentId) ?? [];
       const tail = session?.agentStreamTail.get(params.agentId) ?? [];
@@ -303,7 +308,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       void sendOsNotification({
         title: notification.title,
         body: notification.body,
-        data: notification.data,
+        data: { ...notification.data, reason: params.reason },
       });
     },
     [serverId],

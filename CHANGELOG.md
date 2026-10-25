@@ -1,5 +1,15 @@
 # Changelog
 
+## Personal macOS workbench
+
+- Added built-in PDF and video file-tab panels; hidden video tabs pause playback.
+- Recognized PDF, video, and image paths in agent messages and opened local image previews as file tabs.
+- Routed agent web links into the workspace browser on desktop.
+- Added Device Simulator tabs with real Android capture/input and queued iOS capture/input. The iOS preview requires the approved simulator already booted and an available simq lease; blocked queues are never recovered automatically.
+- Added a deduplicated macOS Glass completion chime, including foreground agent completion, controlled by the existing Play sound preference.
+- Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
+- Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.
+
 ## 0.13.0-beta.1 - 2026-10-22
 
 Foldable phone layouts, agents that delegate work to other machines, plugin file panels, and plugin translations.

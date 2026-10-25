@@ -35,6 +35,10 @@ export {
 
 let cachedStagingUserIdPromise: Promise<string> | null = null;
 
+// Do not replace a personal workbench build with an upstream desktop release.
+const MANUAL_UPDATES_ONLY = true;
+const MANUAL_UPDATE_MESSAGE = "This custom Paseo build is updated manually from Waffle000/paseo.";
+
 const UPDATE_CHANNEL_NOT_PUBLISHED_CODE = "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
 
 interface AppUpdateLogSink {
@@ -251,6 +255,17 @@ export async function checkForAppUpdate({
   releaseChannel: AppReleaseChannel;
   intent: AppUpdateCheckIntent;
 }): Promise<AppUpdateCheckResult> {
+  if (MANUAL_UPDATES_ONLY) {
+    return {
+      hasUpdate: false,
+      readyToInstall: false,
+      currentVersion,
+      latestVersion: currentVersion,
+      body: MANUAL_UPDATE_MESSAGE,
+      date: null,
+      errorMessage: null,
+    };
+  }
   updateLifecycleLog.checkStarted({ currentVersion, releaseChannel, intent });
   const result = await appUpdateService.checkForAppUpdate({
     currentVersion,
@@ -279,6 +294,8 @@ export async function downloadAndInstallUpdate(
   },
   onBeforeQuit?: () => Promise<void>,
 ): Promise<AppUpdateInstallResult> {
+  if (MANUAL_UPDATES_ONLY)
+    return { installed: false, version: null, message: MANUAL_UPDATE_MESSAGE };
   return appUpdateService.downloadAndInstallUpdate(
     { currentVersion, releaseChannel },
     onBeforeQuit,
@@ -294,6 +311,7 @@ export async function installAppUpdateOnQuit({
   releaseChannel: AppReleaseChannel;
   signal: AbortSignal;
 }): Promise<boolean> {
+  if (MANUAL_UPDATES_ONLY) return false;
   if (
     !shouldInstallAppUpdateOnQuit({
       platform: process.platform,

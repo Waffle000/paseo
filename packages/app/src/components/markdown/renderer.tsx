@@ -8,7 +8,7 @@ import {
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import type { Theme } from "@/styles/theme";
-import { isWeb } from "@/constants/platform";
+import { getIsElectron, isWeb } from "@/constants/platform";
 import { density, resolveDensity } from "@/styles/density";
 import { MarkdownBlockStack } from "./block-stack";
 import { WEB_RENDERERS } from "./renderers";
@@ -76,11 +76,19 @@ const MarkdownPart = memo(function MarkdownPart({
   const [image, setImage] = useState<ImageLightboxSource | null>(null);
   const pressLink = useStableEvent(({ url, sourceType }: LinkPressEvent) => {
     const source = linkSource(url, sourceType);
-    if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(url);
+    const useCustomLinkHandler =
+      onLinkPress && !environment.onOpenWorkspaceUrl && !actions.canResolveFile(source);
+    if (useCustomLinkHandler) onLinkPress(url);
     else actions.open(source, "preferred");
   });
   const pressImage = useStableEvent(({ url }: { url: string }) => {
-    if (url !== PENDING_MARKDOWN_IMAGE) setImage({ type: "uri", uri: url });
+    if (url === PENDING_MARKDOWN_IMAGE) return;
+    const source = imageSources[url];
+    if (getIsElectron() && source && actions.canResolveFile({ href: source })) {
+      actions.open({ href: source }, "main");
+      return;
+    }
+    setImage({ type: "uri", uri: url });
   });
   const closeImage = useStableEvent(() => setImage(null));
   const segments = useMemo(

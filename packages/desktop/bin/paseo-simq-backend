@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
+if [[ -n "${PASEO_SIMULATOR_NODE:-}" ]]; then
+  NODE="$PASEO_SIMULATOR_NODE"
+elif [[ -x "$HERE/../../Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper" ]]; then
+  NODE="$HERE/../../Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper"
+else
+  NODE="$(command -v node)"
+fi
+if [[ -f "$HERE/simq-backend.mjs" ]]; then
+  SCRIPT="$HERE/simq-backend.mjs"
+else
+  SCRIPT="$HERE/../scripts/simq-backend.mjs"
+fi
+exec env ELECTRON_RUN_AS_NODE=1 "$NODE" "$SCRIPT" "$@"

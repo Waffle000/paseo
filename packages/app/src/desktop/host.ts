@@ -54,6 +54,7 @@ export interface DesktopDialogBridge {
 }
 
 export interface DesktopNotificationBridge {
+  playCompletionSound?: (eventKey: string) => Promise<boolean>;
   isSupported?: () => Promise<boolean>;
   sendNotification?: (
     payload: string | { title: string; body?: string; data?: Record<string, unknown> },
@@ -168,6 +169,10 @@ export interface DesktopBrowserBridge {
   copyElement?: (payload: { text?: string; imageDataUrl?: string }) => Promise<boolean>;
 }
 
+export interface DesktopSimulatorBridge {
+  open: () => Promise<string>;
+}
+
 export interface DesktopInvokeBridge {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
@@ -187,6 +192,7 @@ export interface DesktopHostBridge {
   webUtils?: DesktopWebUtilsBridge;
   menu?: DesktopMenuBridge;
   browser?: DesktopBrowserBridge;
+  simulator?: DesktopSimulatorBridge;
 }
 
 declare global {
