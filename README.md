@@ -6,6 +6,8 @@
 
 > Device Simulator tabs use a private loopback endpoint saved in the desktop profile as `device-preview-endpoint.json` (mode 600). The endpoint is restored before saved browser tabs load, so reopening the desktop app preserves the tab URL. A restarted preview reconnects through the normal Connect action; it does not silently reclaim an iOS lease. Do not share the endpoint file or its capability URL.
 
+> Usage includes a built-in **9router** source when `~/.9router/db/data.sqlite` exists on the daemon host. It reads only `usageDaily` aggregates in read-only mode: recorded requests, input/output tokens, estimated USD cost, and the matching ISO-date daily bucket. These are recorded traffic totals and pricing estimates—not subscription quota, remaining credit, or an invoice. No API key, account map, request body, or login credential is returned to clients.
+
 <p align="center">
   <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
 </p>

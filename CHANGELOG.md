@@ -1,6 +1,6 @@
 # Changelog
 
-## Personal macOS workbench
+## Personal workbench
 
 - Added built-in PDF and video file-tab panels; hidden video tabs pause playback.
 - Recognized PDF, video, and image paths in agent messages and opened local image previews as file tabs.
@@ -10,6 +10,7 @@
 - Added a deduplicated macOS Glass completion chime, including foreground agent completion, controlled by the existing Play sound preference.
 - Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
 - Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.
+- Added a built-in 9router Usage source backed by read-only local daily aggregates, with recorded requests/tokens and explicitly estimated cost; it does not expose credentials or invent quota limits.
 
 ## 0.13.0-beta.1 - 2026-10-22
 
