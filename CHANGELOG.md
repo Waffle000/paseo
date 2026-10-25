@@ -5,7 +5,8 @@
 - Added built-in PDF and video file-tab panels; hidden video tabs pause playback.
 - Recognized PDF, video, and image paths in agent messages and opened local image previews as file tabs.
 - Routed agent web links into the workspace browser on desktop.
-- Added Device Simulator tabs with real Android capture/input and queued iOS capture/input. The iOS preview requires the approved simulator already booted and an available simq lease; blocked queues are never recovered automatically.
+- Added Device Simulator tabs with real Android capture/input and queued iOS capture/input. Connecting iOS boots only the approved simulator and prepares its input transport under the lease; blocked queues are never recovered automatically.
+- Preserved private Device Simulator endpoints across desktop restarts, and stopped only preview-owned iOS input transports on disconnect.
 - Added a deduplicated macOS Glass completion chime, including foreground agent completion, controlled by the existing Play sound preference.
 - Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
 - Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.

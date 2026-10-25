@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 import { devicePreviewPage } from "./page.js";
 import {
@@ -21,6 +23,34 @@ const actionRequest = z.object({ sessionId, action: previewAction });
 let server: Server | null = null;
 let opening: Promise<string> | null = null;
 
+const endpointSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+  capability: z.string().regex(/^[a-f0-9]{64}$/),
+});
+type PreviewEndpoint = z.infer<typeof endpointSchema>;
+
+function endpointPath(): string {
+  return path.join(app.getPath("userData"), "device-preview-endpoint.json");
+}
+
+async function readEndpoint(): Promise<PreviewEndpoint | null> {
+  try {
+    return endpointSchema.parse(JSON.parse(await readFile(endpointPath(), "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function openPreview(): Promise<string> {
+  opening ??= readEndpoint()
+    .then(startPreviewServer)
+    .catch((error: unknown) => {
+      opening = null;
+      throw error;
+    });
+  return opening;
+}
 async function readBody(request: IncomingMessage): Promise<unknown> {
   request.setEncoding("utf8");
   let body = "";
@@ -37,8 +67,8 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
-async function startPreviewServer(): Promise<string> {
-  const capability = randomBytes(32).toString("hex");
+async function startPreviewServer(endpoint: PreviewEndpoint | null): Promise<string> {
+  const capability = endpoint?.capability ?? randomBytes(32).toString("hex");
   const base = `/${capability}/`;
   const instance = createServer((request, response) => {
     void dispatch(request, response).catch((error: unknown) => {
@@ -115,29 +145,54 @@ async function startPreviewServer(): Promise<string> {
     json(response, 404, { error: "Unknown preview operation." });
   }
   const listening = once(instance, "listening");
-  instance.listen(0, "127.0.0.1");
+  instance.listen(endpoint?.port ?? 0, "127.0.0.1");
   await listening;
   const address = instance.address();
   if (!address || typeof address === "string")
     throw new Error("Cannot determine device preview address.");
   origin = `http://127.0.0.1:${address.port}`;
+  if (!endpoint) {
+    try {
+      await mkdir(app.getPath("userData"), { recursive: true });
+      const temporary = `${endpointPath()}.${process.pid}.tmp`;
+      await writeFile(temporary, JSON.stringify({ port: address.port, capability }), {
+        mode: 0o600,
+      });
+      await rename(temporary, endpointPath());
+    } catch (error) {
+      instance.close();
+      throw error;
+    }
+  }
   server = instance;
   return `${origin}${base}`;
 }
 
-export function registerDevicePreviewHandlers(): void {
-  ipcMain.handle("paseo:simulator:open", () => {
-    opening ??= startPreviewServer().catch((error: unknown) => {
+export async function registerDevicePreviewHandlers(): Promise<void> {
+  ipcMain.handle("paseo:simulator:open", openPreview);
+  const endpoint = await readEndpoint();
+  if (endpoint) {
+    opening = startPreviewServer(endpoint).catch((error: unknown) => {
       opening = null;
       throw error;
     });
-    return opening;
-  });
+    await opening;
+  }
 }
 
 export async function closeDevicePreviews(): Promise<void> {
   await disconnectAllPreviews();
-  server?.close();
+  const current = server;
   server = null;
   opening = null;
+  if (current)
+    await new Promise<void>((resolve, reject) => {
+      current.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
 }

@@ -17,6 +17,7 @@ interface PreviewSession {
   device: PreviewDevice;
   serial: string;
   ticket: string | null;
+  streamOwned: boolean;
   width: number;
   height: number;
 }
@@ -30,6 +31,7 @@ const queueStatus = z.object({
   }),
 });
 const queueTicket = z.object({ ticket_id: z.string() });
+const transportResult = z.object({ result: z.object({ owned: z.boolean() }) });
 const sessions = new Map<string, PreviewSession>();
 let iosConnecting = false;
 
@@ -60,7 +62,7 @@ export async function listPreviewDevices(): Promise<{
       if (state.system.blocked) notices.push(`iOS queue blocked: ${state.system.blocked_reason}`);
       if (state.system.paused) notices.push("iOS queue is paused.");
       notices.push(
-        "iOS requires the approved shared simulator to be booted in Xcode. Access is held through simq until Disconnect.",
+        "iOS boots only the approved shared simulator. Access is held through simq until Disconnect.",
       );
     } catch (error) {
       notices.push(error instanceof Error ? error.message : "iOS simulator queue is unavailable.");
@@ -148,13 +150,17 @@ export async function connectPreview(id: string): Promise<string> {
   if (!device) throw new Error("Device is no longer available. Refresh the device list.");
   let ticket: string | null = null;
   let serial = device.id.slice(4);
+  let streamOwned = false;
   if (device.platform === "ios") {
     ticket = await acquireIosTicket();
+    await runQueue(["app", "boot", "--ticket", ticket], 185000);
+    const prepared = transportResult.parse(await runQueue(["ui", "prepare", "--ticket", ticket]));
+    streamOwned = prepared.result.owned;
   } else {
     serial = await resolveAndroid(device);
   }
   const sessionId = randomUUID();
-  sessions.set(sessionId, { device, serial, ticket, width: 1, height: 1 });
+  sessions.set(sessionId, { device, serial, ticket, streamOwned, width: 1, height: 1 });
   return sessionId;
 }
 
@@ -235,7 +241,10 @@ export async function controlPreview(id: string, action: PreviewAction): Promise
 
 export async function disconnectPreview(id: string): Promise<void> {
   const session = getSession(id);
-  if (session.ticket) await runQueue(["release", "--ticket", session.ticket]);
+  if (session.ticket) {
+    if (session.streamOwned) await runQueue(["ui", "stop", "--ticket", session.ticket]);
+    await runQueue(["release", "--ticket", session.ticket]);
+  }
   sessions.delete(id);
 }
 
