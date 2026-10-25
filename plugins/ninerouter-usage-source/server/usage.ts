@@ -1,116 +1,124 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { hashAccountKey } from "@getpaseo/plugin/server/usage";
-import type { UsageAccount, UsageReport } from "@getpaseo/plugin/server/usage";
+import { hashAccountKey, unavailable } from "@getpaseo/plugin/server/usage";
+import type { UsageAccount, UsageReport, UsageDetail } from "@getpaseo/plugin/server/usage";
 import type { Input } from "../shared/input.js";
+import { providerLabels, quotaReport } from "./quota.js";
 
-// The plugin workspace uses Node 20 typings; the daemon's Node 22+ runtime supplies SQLite.
-interface MetricDatabase {
-  prepare(sql: string): { get(...bindings: unknown[]): unknown };
-  close(): void;
-}
-interface Sqlite {
-  DatabaseSync: new (path: string, options: { readOnly: boolean }) => MetricDatabase;
-}
-
-// Node 20 typings omit SQLite, and evaluated plugin bundles do not have import.meta.url.
-const sqlite = process.getBuiltinModule("node:sqlite") as Sqlite | undefined;
-if (!sqlite) throw new Error("9router usage requires a Node runtime with SQLite support.");
-const { DatabaseSync } = sqlite;
-
-const count = z.number().int().nonnegative();
-const metricsSchema = z.object({
-  requests: count,
-  inputTokens: count,
-  outputTokens: count,
-  cost: z.number().finite().nonnegative(),
-  dayRequests: count,
-  dayInputTokens: count,
-  dayOutputTokens: count,
-  dayCost: z.number().finite().nonnegative(),
-  invalidRows: count,
+const origin = "http://127.0.0.1:20128";
+const accountSchema = z.object({
+  id: z.string().min(1).max(512),
+  provider: z.string().min(1),
+  name: z.string().nullish(),
+  email: z.string().nullish(),
+  isActive: z.boolean(),
+  testStatus: z.string().nullish(),
 });
-const numbers = new Intl.NumberFormat("en-US");
+const listingSchema = z.object({
+  connections: z.array(accountSchema),
+  pagination: z.object({ totalPages: z.number().int().nonnegative() }).optional(),
+});
+
+async function request(route: string, dataDir: string, fetchApi: typeof fetch): Promise<Response> {
+  let machineId: string;
+  let secret: string;
+  try {
+    [machineId, secret] = await Promise.all([
+      readFile(join(dataDir, "machine-id"), "utf8"),
+      readFile(join(dataDir, "auth", "cli-secret"), "utf8"),
+    ]);
+  } catch {
+    throw new Error("9router local CLI authentication is unavailable.");
+  }
+  if (!machineId.trim() || !secret.trim())
+    throw new Error("9router local CLI authentication is empty.");
+  // This is 9router's machine-local CLI authentication contract, not a provider/API key.
+  // Keep it only on the daemon and never follow redirects with this privileged header.
+  const token = createHash("sha256")
+    .update(machineId.trim())
+    .update("9r-cli-auth")
+    .update(secret.trim())
+    .digest("hex")
+    .slice(0, 16);
+  return fetchApi(`${origin}${route}`, {
+    method: "GET",
+    headers: { "x-9r-cli-token": token, Accept: "application/json" },
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+}
 
 export async function discover(
-  path = join(homedir(), ".9router", "db", "data.sqlite"),
+  dataDir = join(homedir(), ".9router"),
+  fetchApi: typeof fetch = fetch,
 ): Promise<UsageAccount[]> {
-  return existsSync(path)
-    ? [{ key: hashAccountKey(path), label: "Local 9router", input: { path } }]
-    : [];
+  if (!existsSync(join(dataDir, "machine-id")) || !existsSync(join(dataDir, "auth", "cli-secret")))
+    return [];
+  const accounts: UsageAccount[] = [];
+  const seen = new Set<string>();
+  let totalPages = 1;
+  for (let page = 1; page <= totalPages; page++) {
+    // The dashboard's client endpoint excludes provider credential blobs.
+    const response = await request(
+      `/api/providers/client?page=${page}&pageSize=100&accountStatus=all&sort=priority`,
+      dataDir,
+      fetchApi,
+    );
+    if (!response.ok) throw new Error(`9router account listing returned HTTP ${response.status}.`);
+    const listing = listingSchema.parse(await response.json());
+    totalPages = listing.pagination?.totalPages ?? 1;
+    for (const account of listing.connections) {
+      if (seen.has(account.id)) continue;
+      seen.add(account.id);
+      accounts.push({
+        key: hashAccountKey(account.id),
+        label:
+          account.email ||
+          account.name ||
+          `${providerLabels[account.provider] || account.provider} · ${account.id.slice(0, 8)}`,
+        input: {
+          dataDir,
+          connectionId: account.id,
+          provider: account.provider,
+          enabled: account.isActive,
+          status: account.testStatus || "unknown",
+        },
+      });
+    }
+  }
+  return accounts;
 }
 
-export async function fetchUsage(input: Input, now = new Date()): Promise<UsageReport> {
-  const db = new DatabaseSync(input.path, { readOnly: true });
-  const day = now.toISOString().slice(0, 10);
-  try {
-    // Read daily aggregates, not request bodies, API keys, account credentials, or private logs.
-    // One statement keeps the total and selected daily bucket in the same SQLite snapshot.
-    const metrics = metricsSchema.parse(
-      db
-        .prepare(`
-      SELECT
-        COALESCE(SUM(json_extract(data, '$.requests')), 0) AS requests,
-        COALESCE(SUM(json_extract(data, '$.promptTokens')), 0) AS inputTokens,
-        COALESCE(SUM(json_extract(data, '$.completionTokens')), 0) AS outputTokens,
-        COALESCE(SUM(json_extract(data, '$.cost')), 0) AS cost,
-        COALESCE(SUM(CASE WHEN dateKey = ? THEN json_extract(data, '$.requests') ELSE 0 END), 0) AS dayRequests,
-        COALESCE(SUM(CASE WHEN dateKey = ? THEN json_extract(data, '$.promptTokens') ELSE 0 END), 0) AS dayInputTokens,
-        COALESCE(SUM(CASE WHEN dateKey = ? THEN json_extract(data, '$.completionTokens') ELSE 0 END), 0) AS dayOutputTokens,
-        COALESCE(SUM(CASE WHEN dateKey = ? THEN json_extract(data, '$.cost') ELSE 0 END), 0) AS dayCost,
-        COALESCE(SUM(CASE WHEN
-          json_type(data, '$.requests') IN ('integer', 'real') AND
-          json_type(data, '$.promptTokens') IN ('integer', 'real') AND
-          json_type(data, '$.completionTokens') IN ('integer', 'real') AND
-          json_type(data, '$.cost') IN ('integer', 'real')
-          THEN 0 ELSE 1 END), 0) AS invalidRows
-      FROM usageDaily
-    `)
-        .get(day, day, day, day),
-    );
-    if (metrics.invalidRows > 0) throw new Error("Unsupported 9router daily usage data.");
-    return {
-      status: "available",
-      planLabel: "Recorded local traffic",
-      windows: [],
-      balances: [
-        { id: "requests", label: "Recorded requests", used: metrics.requests, unit: "requests" },
-        {
-          id: "tokens",
-          label: "Recorded tokens",
-          used: metrics.inputTokens + metrics.outputTokens,
-          unit: "tokens",
-        },
-        { id: "estimated_cost", label: "Estimated cost", used: metrics.cost, unit: "usd" },
-      ],
-      details: [
-        { id: "input_tokens", label: "Input tokens", value: numbers.format(metrics.inputTokens) },
-        {
-          id: "output_tokens",
-          label: "Output tokens",
-          value: numbers.format(metrics.outputTokens),
-        },
-        { id: "daily_bucket", label: "Daily bucket", value: day },
-        {
-          id: "daily_requests",
-          label: "Bucket requests",
-          value: numbers.format(metrics.dayRequests),
-        },
-        {
-          id: "daily_tokens",
-          label: "Bucket tokens",
-          value: numbers.format(metrics.dayInputTokens + metrics.dayOutputTokens),
-        },
-        {
-          id: "daily_estimated_cost",
-          label: "Bucket estimated cost",
-          value: `$${metrics.dayCost.toFixed(4)}`,
-        },
-      ],
-    };
-  } finally {
-    db.close();
+export async function fetchUsage(
+  input: Input,
+  fetchApi: typeof fetch = fetch,
+): Promise<UsageReport> {
+  // Use the same read-only, cached quota endpoint as Quota Tracker. No reset, ping or credit-spending actions.
+  const response = await request(
+    `/api/usage/${encodeURIComponent(input.connectionId)}`,
+    input.dataDir,
+    fetchApi,
+  );
+  if (response.status === 401 || response.status === 403) {
+    return unavailable({ kind: "rejected", status: response.status, refreshedBy: "9router" });
   }
+  if (!response.ok) throw new Error(`9router account quota returned HTTP ${response.status}.`);
+  const report = quotaReport(input.provider, await response.json());
+  if (report.status === "available") {
+    report.details ??= [];
+    let tone: UsageDetail["tone"] = "default";
+    if (!input.enabled) tone = "warning";
+    else if (/unavailable|error|invalid|expired/i.test(input.status)) tone = "danger";
+    report.details.push({
+      id: "account_status",
+      label: "9router account status",
+      value: input.enabled ? input.status : "Disabled",
+      tone,
+    });
+  }
+  return report;
 }

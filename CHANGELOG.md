@@ -10,7 +10,7 @@
 - Added a deduplicated macOS Glass completion chime, including foreground agent completion, controlled by the existing Play sound preference.
 - Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
 - Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.
-- Added a built-in 9router Usage source backed by read-only local daily aggregates, with recorded requests/tokens and explicitly estimated cost; it does not expose credentials or invent quota limits.
+- Added per-account 9router quota cards from the Quota Tracker endpoints, with actual percentages, reset times, account status, and shared-model grouping. Replaced the earlier aggregate traffic/cost source; local CLI authentication stays server-side and refresh never invokes quota-reset or credit-spending actions.
 
 ## 0.13.0-beta.1 - 2026-10-22
 
