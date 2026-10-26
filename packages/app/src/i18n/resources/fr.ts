@@ -1991,6 +1991,7 @@ export const fr: TranslationResources = {
           image: "Image",
           pdf: "PDF",
           video: "Vidéo",
+          diagram: "Diagramme",
           source: "Source",
         },
       },

@@ -1970,6 +1970,7 @@ export const en = {
           image: "Image",
           pdf: "PDF",
           video: "Video",
+          diagram: "Diagram",
           source: "Source",
         },
       },

@@ -57,6 +57,7 @@ import {
   registerDevicePreviewHandlers,
   closeDevicePreviews,
 } from "./features/device-preview/server.js";
+import { registerDiagramEditor, closeDiagramEditor } from "./features/diagram-editor.js";
 import { createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
@@ -978,6 +979,7 @@ async function bootstrap(): Promise<void> {
   await registerDevicePreviewHandlers().catch((error: unknown) => {
     log.error("[device-preview] failed to restore local endpoint", error);
   });
+  registerDiagramEditor();
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
   ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
   registerEditorTargetHandlers();
@@ -1043,6 +1045,7 @@ const quitLifecycle = createQuitLifecycle({
   app,
   closeTransportSessions: closeAllTransportSessions,
   stopDesktopManagedDaemonIfNeeded: async () => {
+    closeDiagramEditor();
     await closeDevicePreviews();
     return stopDesktopManagedDaemonOnQuitIfNeeded({
       settingsStore: getDesktopSettingsStore(),

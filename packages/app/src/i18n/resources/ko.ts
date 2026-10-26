@@ -1955,6 +1955,7 @@ export const ko: TranslationResources = {
           image: "이미지",
           pdf: "PDF",
           video: "동영상",
+          diagram: "다이어그램",
           source: "소스",
         },
       },

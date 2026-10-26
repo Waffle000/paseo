@@ -2,6 +2,12 @@ import type { FilePanelCandidate } from "./resolve";
 
 const renderingPanels = [
   {
+    id: "builtin:diagram",
+    builtin: true,
+    files: { extensions: ["drawio", "dio"] },
+    fileKind: "text",
+  },
+  {
     id: "builtin:markdown",
     builtin: true,
     files: { extensions: ["md", "markdown"] },

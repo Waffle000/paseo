@@ -1,4 +1,6 @@
 export const ASSISTANT_MEDIA_EXTENSIONS = [
+  "drawio",
+  "dio",
   "pdf",
   "png",
   "jpg",

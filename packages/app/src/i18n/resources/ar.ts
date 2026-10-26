@@ -1945,6 +1945,7 @@ export const ar: TranslationResources = {
           image: "صورة",
           pdf: "PDF",
           video: "فيديو",
+          diagram: "مخطط",
           source: "المصدر",
         },
       },

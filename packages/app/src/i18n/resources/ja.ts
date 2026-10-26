@@ -1964,6 +1964,7 @@ export const ja: TranslationResources = {
           image: "画像",
           pdf: "PDF",
           video: "動画",
+          diagram: "図",
           source: "ソース",
         },
       },

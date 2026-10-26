@@ -6,6 +6,8 @@ build/
 dist/
 .next/
 out/
+/packages/app/public/drawio/
+/packages/app/public/drawio.preparing/
 result
 
 # Environment variables

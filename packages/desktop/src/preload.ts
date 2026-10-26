@@ -89,6 +89,9 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
   simulator: {
     open: () => ipcRenderer.invoke("paseo:simulator:open"),
   },
+  diagram: {
+    open: () => ipcRenderer.invoke("paseo:diagram:open"),
+  },
   notification: {
     playCompletionSound: (eventKey: string) =>
       ipcRenderer.invoke("paseo:notification:completion", eventKey),

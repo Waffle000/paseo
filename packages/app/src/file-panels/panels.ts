@@ -3,6 +3,7 @@ import type { PluginFile, PluginFileLocation, PluginFileTab } from "@getpaseo/pl
 import { useInstalledPlugins } from "@/plugins/registry";
 import type { PluginFilePanelContribution, InstalledPlugin } from "@/plugins/types";
 import { filePanelCatalog, type RenderingFilePanel, type SourceFilePanel } from "./catalog";
+import { getDesktopHost } from "@/desktop/host";
 
 export interface PluginFilePanel {
   id: string;
@@ -46,5 +47,5 @@ function hostFilePanels(plugins: readonly InstalledPlugin[]): readonly FilePanel
         contribution,
       })),
     ),
-  );
+  ).filter((panel) => panel.id !== "builtin:diagram" || Boolean(getDesktopHost()?.diagram));
 }

@@ -12,6 +12,7 @@ import { TextFilePanel, type TextFilePreviewProps } from "./source/panel";
 import type { RenderingFilePanel, SourceFilePanel } from "./catalog";
 import { DocumentFrame } from "./document-frame";
 import { VideoFilePanel } from "./video";
+import { DiagramPreview } from "./diagram";
 
 /** Source: the text file panel with no Preview, for text files no other built-in panel claims. */
 function SourcePanel(props: BuiltinFilePanelProps) {
@@ -26,6 +27,10 @@ function MarkdownPanel(props: BuiltinFilePanelProps) {
 /** HTML: the text file panel with the sandboxed page as its Preview. */
 function HtmlPanel(props: BuiltinFilePanelProps) {
   return <TextFilePanel {...props} preview={HtmlPreview} />;
+}
+
+function DiagramPanel(props: BuiltinFilePanelProps) {
+  return <TextFilePanel {...props} preview={DiagramPreview} />;
 }
 
 /** Shows Loading until the rendered Markdown has laid out once; later edits keep the content. */
@@ -83,6 +88,7 @@ function FilePanelError({ message }: { message: string }) {
 }
 
 const components = {
+  "builtin:diagram": DiagramPanel,
   "builtin:markdown": MarkdownPanel,
   "builtin:html": HtmlPanel,
   "builtin:image": ImagePanel,

@@ -1977,6 +1977,7 @@ export const ru: TranslationResources = {
           image: "Изображение",
           pdf: "PDF",
           video: "Видео",
+          diagram: "Диаграмма",
           source: "Исходный текст",
         },
       },

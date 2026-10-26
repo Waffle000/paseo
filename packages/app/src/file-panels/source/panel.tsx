@@ -25,6 +25,7 @@ import { FileEditorView } from "./editor/view";
 import { selectSourcePresentation } from "./readonly/presentation";
 import { FileSourceView } from "./readonly/view";
 import { TextFileToolbar, type TextFileView } from "./toolbar";
+import type { FileEditorStatus } from "./editor/model";
 
 // CodeMirror and native source rendering consume appearance as props. Subscribe at the
 // rendering leaf so theme updates reconfigure it without replacing the editor/model.
@@ -52,6 +53,10 @@ const MAX_EDITABLE_BYTES = 1024 * 1024;
 export interface TextFilePreviewProps {
   text: string;
   target: BuiltinFilePanelProps["target"];
+  onChange?: (text: string) => void;
+  onSave?: () => void;
+  modified?: boolean;
+  status?: FileEditorStatus;
 }
 
 type TextFilePanelProps = BuiltinFilePanelProps & {
@@ -154,6 +159,8 @@ function EditableTextFile({ file, tab, location, target, preview: Preview }: Tex
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [vimMode, setVimMode] = useState<string | null>(settings.vimKeybindings ? "NORMAL" : null);
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
+  const handlePreviewChange = useCallback((text: string) => model.edit(text), [model]);
+  const handlePreviewSave = useCallback(() => void model.save(), [model]);
 
   useEffect(() => {
     model.open();
@@ -222,7 +229,14 @@ function EditableTextFile({ file, tab, location, target, preview: Preview }: Tex
         conflict={conflict}
       />
       {showPreview ? (
-        <Preview text={snapshot.content} target={target} />
+        <Preview
+          text={snapshot.content}
+          target={target}
+          onChange={handlePreviewChange}
+          onSave={handlePreviewSave}
+          modified={snapshot.modified}
+          status={snapshot.status}
+        />
       ) : (
         <SourceEditor
           model={model}

@@ -34,6 +34,14 @@ describe("built-in file panels", () => {
     expect(panelId(textFile("plan.htm"))).toBe("builtin:html");
   });
 
+  it("opens diagram XML as a diagram rather than a source editor or archive", () => {
+    expect(panelId(textFile("architecture.DRAWIO"))).toBe("builtin:diagram");
+    expect(panelId(textFile("flow.dio"))).toBe("builtin:diagram");
+    expect(panelId(textFile("flow.drawio.xml"))).toBe("builtin:source");
+    expect(panelId({ path: "flow.drawio.zip", kind: "binary" })).toBeNull();
+    expect(panelId({ path: "flow.drawio", kind: "binary" })).toBeNull();
+  });
+
   it("opens every other text file with Source, whatever its name", () => {
     for (const path of ["src/index.ts", "page.mdx", "index.html.erb", "Dockerfile", "LICENSE"]) {
       expect(candidateIds(textFile(path))).toEqual(["builtin:source"]);

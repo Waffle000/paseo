@@ -193,6 +193,7 @@ export interface DesktopHostBridge {
   menu?: DesktopMenuBridge;
   browser?: DesktopBrowserBridge;
   simulator?: DesktopSimulatorBridge;
+  diagram?: { open: () => Promise<string> };
 }
 
 declare global {

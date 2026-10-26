@@ -1923,6 +1923,7 @@ export const zhCN: TranslationResources = {
           image: "图片",
           pdf: "PDF",
           video: "视频",
+          diagram: "图表",
           source: "源代码",
         },
       },

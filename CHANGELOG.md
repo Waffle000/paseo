@@ -11,6 +11,8 @@
 - Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
 - Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.
 - Added per-account 9router quota cards from the Quota Tracker endpoints, with actual percentages, reset times, account status, and shared-model grouping. Replaced the earlier aggregate traffic/cost source; local CLI authentication stays server-side and refresh never invokes quota-reset or credit-spending actions.
+- Added a bundled offline draw.io viewer/editor for desktop `.drawio`/`.dio` file tabs and agent links, with multi-page/compressed diagram support and a shared XML source buffer.
+- Reused autosave, dirty-tab and external-change conflict handling for diagram edits; isolated the editor from the app origin and blocked external navigation/resource loads.
 
 ## 0.13.0-beta.1 - 2026-10-22
 
