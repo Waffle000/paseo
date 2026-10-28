@@ -58,6 +58,7 @@ import {
   closeDevicePreviews,
 } from "./features/device-preview/server.js";
 import { registerDiagramEditor, closeDiagramEditor } from "./features/diagram-editor.js";
+import { registerOpenDesign, closeOpenDesign } from "./features/open-design.js";
 import { createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
@@ -120,7 +121,7 @@ const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
+const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "MeowSh";
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
@@ -139,6 +140,10 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 });
 let bootstrapIsComplete = false;
 
+// Display branding must not change existing pairing, settings, or browser storage.
+if (!process.env.PASEO_TEST_APP_NAME?.trim()) {
+  app.setPath("userData", path.join(app.getPath("appData"), "Paseo"));
+}
 app.setName(APP_NAME);
 log.info("[desktop] app startup", {
   version: app.getVersion(),
@@ -980,6 +985,7 @@ async function bootstrap(): Promise<void> {
     log.error("[device-preview] failed to restore local endpoint", error);
   });
   registerDiagramEditor();
+  await registerOpenDesign();
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
   ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
   registerEditorTargetHandlers();
@@ -1046,6 +1052,7 @@ const quitLifecycle = createQuitLifecycle({
   closeTransportSessions: closeAllTransportSessions,
   stopDesktopManagedDaemonIfNeeded: async () => {
     closeDiagramEditor();
+    closeOpenDesign();
     await closeDevicePreviews();
     return stopDesktopManagedDaemonOnQuitIfNeeded({
       settingsStore: getDesktopSettingsStore(),

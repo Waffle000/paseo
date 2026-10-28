@@ -2,13 +2,16 @@
 
 ## Personal workbench
 
+- Branded the macOS bundle as MeowSh with an original full-color striped-cat icon, preserving the existing desktop profile, daemon home, pairing identity, and selected theme. Each in-app logo owns its SVG gradient so retained screens cannot turn another logo black.
+- Integrated the separately installed local Open Design runtime into workspace tabs, with canonical folder linking and explicit same-workspace handoff to a new or existing coding agent.
+- Documented the existing split-pane menu for side-by-side coding, design, and emulator preview.
 - Added built-in PDF and video file-tab panels; hidden video tabs pause playback.
 - Recognized PDF, video, and image paths in agent messages and opened local image previews as file tabs.
 - Routed agent web links into the workspace browser on desktop.
 - Added Device Simulator tabs with real Android capture/input and queued iOS capture/input. Connecting iOS boots only the approved simulator and prepares its input transport under the lease; blocked queues are never recovered automatically.
 - Preserved private Device Simulator endpoints across desktop restarts, and stopped only preview-owned iOS input transports on disconnect.
 - Added a deduplicated macOS Glass completion chime, including foreground agent completion, controlled by the existing Play sound preference.
-- Disabled automatic updates in this personal build so upstream releases cannot overwrite its customizations.
+- Disabled automatic updates and implicit build publishing in this personal build so upstream releases cannot overwrite its customizations and local builds do not publish by CI detection.
 - Personal macOS packages use ad-hoc signing without hardened runtime or notarization; public distribution requires a Developer ID signing configuration.
 - Added per-account 9router quota cards from the Quota Tracker endpoints, with actual percentages, reset times, account status, and shared-model grouping. Replaced the earlier aggregate traffic/cost source; local CLI authentication stays server-side and refresh never invokes quota-reset or credit-spending actions.
 - Added a bundled offline draw.io viewer/editor for desktop `.drawio`/`.dio` file tabs and agent links, with multi-page/compressed diagram support and a shared XML source buffer.

@@ -194,6 +194,10 @@ export interface DesktopHostBridge {
   browser?: DesktopBrowserBridge;
   simulator?: DesktopSimulatorBridge;
   diagram?: { open: () => Promise<string> };
+  openDesign?: {
+    open: (cwd: string) => Promise<string>;
+    handoff: (cwd: string) => Promise<string>;
+  };
 }
 
 declare global {

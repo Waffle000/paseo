@@ -1,4 +1,10 @@
-> Personal macOS fork: PDF/video/image file tabs, in-workspace agent links, Device Simulator preview, and an agent completion chime. Automatic updates are disabled; update this build from `Waffle000/paseo`. The existing daemon home and desktop app identity are preserved for installation over Paseo. Simulator previews run locally; this does not add emulator controls to the official phone client.
+> **MeowSh** is this personal macOS fork of Paseo: full-color striped-cat branding, PDF/video/image tabs, local Open Design, draw.io, Device Simulator preview, and an agent completion chime. The logo does not change your selected theme. Automatic updates and implicit build publishing are disabled; update this build from `Waffle000/paseo`. The existing `~/.paseo` daemon home, `Paseo` desktop profile, app ID, and pairing scheme are preserved. Local simulator controls are not added to the official phone client.
+
+> Use the pane **⋯ → Split pane right / Split pane down** menu to keep an agent and a supporting tab visible together. Each new pane has its own tab launcher; select Open Design, Device Simulator, a browser, or another supported panel there. Pane placement uses the existing saved workspace layout.
+
+> **Open Design** appears in the local Mac workspace tab launcher and the **Design** header menu. It links the actual workspace folder, not a copied project. This integration was exercised with the official [Open Design 0.26.1 runtime](https://github.com/nexu-io/open-design/releases), installed separately at `~/.local/share/meowsh/open-design/Open Design.app`; `MEOWSH_OPEN_DESIGN_APP` can select another absolute app-bundle path. The runtime is not bundled into MeowSh. It runs on loopback with separate `open-design/` data in the desktop profile, no inherited PostHog/Langfuse telemetry keys, and a restored local browser origin. Design generation still requires a configured agent CLI supported by Open Design.
+
+> **Design → Prepare design for a new agent** opens a workspace-bound composer containing the current design file references. Choose the coding model, add the implementation request, and send. **Send design context to …** sends references to an existing agent in this workspace through the normal steer path without submitting or overwriting its unsent draft. Receiving context alone does not request file changes. Other workspaces and remote-host agents are not offered as destinations; no design contents are uploaded by the handoff itself.
 
 > iOS uses the existing `~/.local/bin/simq` queue and only its approved device. The local queue must support `app boot` and `ui prepare`/`ui stop`: connecting boots the approved device and prepares input under the held lease. Disconnect stops only the input transport started by that preview and releases the lease; it never shuts down the simulator. Blocked/paused queues require explicit human recovery. Android requires Android SDK platform-tools and an available device or AVD. Preview refresh is screenshot-based and pauses while hidden; it is not a 60-FPS video stream.
 
@@ -13,10 +19,10 @@
 > The first desktop build prepares draw.io **32.6.1** using `scripts/prepare-drawio.mjs`, pinned to SHA-256 `44dd56958c8408963457dc98f04d2228408ac145c7aa1d8e6895d9c88d5e42aa`. A pre-downloaded `draw.war` can be supplied via `DRAWIO_ARCHIVE`. Generated static assets are not committed; upstream Apache/asset license notices are included in the app. At runtime the editor uses an isolated local origin and opaque iframe sandbox, with external resource loads and frame navigation blocked. Diagram contents are not uploaded; remote image/font/online integrations are deliberately unavailable offline.
 
 <p align="center">
-  <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
+  <img src="packages/desktop/assets/meowsh.svg" width="64" height="64" alt="MeowSh striped cat logo">
 </p>
 
-<h1 align="center">Paseo</h1>
+<h1 align="center">MeowSh</h1>
 
 <p align="center">
   <a href="README.md">English</a> ·

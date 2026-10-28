@@ -136,6 +136,10 @@ import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
+import { buildDraftStoreKey } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { OpenDesignMenu } from "@/workspace-tabs/open-design-menu";
 import { resolveWorkspaceRouteId } from "@/utils/workspace-identity";
 import { useOpenAgentTabLabels } from "@/subagents/use-open-agent-tab-labels";
 import { WorkspaceTabPresentationResolver } from "@/screens/workspace/workspace-tab-presentation";
@@ -1068,6 +1072,14 @@ function WorkspaceScreenContent({
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
   const workspaceDirectory = workspaceDescriptor?.workspaceDirectory || null;
+  const isLocalDesignHost = useIsLocalDaemon(normalizedServerId);
+  const showOpenDesign = useMemo(
+    () =>
+      isLocalDesignHost &&
+      getDesktopHost()?.platform === "darwin" &&
+      Boolean(workspaceDirectory && getDesktopHost()?.openDesign),
+    [isLocalDesignHost, workspaceDirectory],
+  );
   const isMissingWorkspaceDirectory = Boolean(workspaceDescriptor) && !workspaceDirectory;
   const [isImportSheetVisible, setIsImportSheetVisible] = useState(false);
   const canOpenImportSheet = [client, isConnected, workspaceDirectory].every(Boolean);
@@ -1857,6 +1869,28 @@ function WorkspaceScreenContent({
     [createWorkspaceTab, persistenceKey],
   );
 
+  const handleDesignHandoff = useStableEvent(async (agentId?: string) => {
+    if (!showOpenDesign || !workspaceDirectory || !persistenceKey) return;
+    try {
+      const text = await getDesktopHost()!.openDesign!.handoff(workspaceDirectory);
+      if (agentId) {
+        const agent = useSessionStore.getState().sessions[normalizedServerId]?.agents.get(agentId);
+        if (!agent || agent.workspaceId !== normalizedWorkspaceId || agent.archivedAt)
+          throw new Error("The selected agent no longer belongs to this workspace.");
+        if (!client) throw new Error("The workspace host is disconnected.");
+        await client.sendAgentMessage(agentId, text, { activeTurnBehavior: "steer" });
+        openWorkspaceTabFocused(persistenceKey, { kind: "agent", agentId });
+        return;
+      }
+      const draftId = generateDraftId();
+      const draftKey = buildDraftStoreKey({ serverId: normalizedServerId, agentId: "", draftId });
+      useDraftStore.getState().editDraftText({ draftKey, text });
+      openWorkspaceTabFocused(persistenceKey, { kind: "draft", draftId });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  });
+
   const launchWorkspaceTab = useCallback(
     (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => {
       if (!persistenceKey) {
@@ -1887,6 +1921,24 @@ function WorkspaceScreenContent({
         });
         return;
       }
+      if (selection.kind === "open-design") {
+        if (!showOpenDesign || !workspaceDirectory) return;
+        void getDesktopHost()!
+          .openDesign!.open(workspaceDirectory)
+          .then((url) => {
+            const { browserId } = createWorkspaceBrowser({ initialUrl: url });
+            openTarget({ kind: "browser", browserId });
+            return browserId;
+          })
+          .catch((error: unknown) =>
+            toast.error(error instanceof Error ? error.message : String(error)),
+          );
+        return;
+      }
+      if (selection.kind === "design-agent") {
+        void handleDesignHandoff();
+        return;
+      }
       if (selection.kind === "simulator") {
         const simulator = getDesktopHost()?.simulator;
         if (!simulator) return;
@@ -1905,7 +1957,20 @@ function WorkspaceScreenContent({
       const { browserId } = createWorkspaceBrowser();
       openTarget({ kind: "browser", browserId });
     },
-    [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget, toast],
+    [
+      createTerminal,
+      createWorkspaceTab,
+      persistenceKey,
+      replaceWorkspaceTabTarget,
+      toast,
+      showOpenDesign,
+      workspaceDirectory,
+      handleDesignHandoff,
+    ],
+  );
+  const handleOpenDesignTab = useCallback(
+    () => launchWorkspaceTab({ kind: "open-design" }, { kind: "open" }),
+    [launchWorkspaceTab],
   );
 
   const handleOpenUrlInBrowserTab = useCallback(
@@ -3218,6 +3283,14 @@ function WorkspaceScreenContent({
     () => (
       <View style={styles.headerRight}>
         <PluginHeaderButtons serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
+        {showOpenDesign ? (
+          <OpenDesignMenu
+            serverId={normalizedServerId}
+            workspaceId={normalizedWorkspaceId}
+            onOpen={handleOpenDesignTab}
+            onHandoff={handleDesignHandoff}
+          />
+        ) : null}
         {workspaceDescriptor && workspaceDescriptor.scripts.length > 0 ? (
           <WorkspaceScriptsButton
             serverId={normalizedServerId}
@@ -3256,6 +3329,9 @@ function WorkspaceScreenContent({
     ),
     [
       workspaceDescriptor,
+      showOpenDesign,
+      handleOpenDesignTab,
+      handleDesignHandoff,
       normalizedServerId,
       normalizedWorkspaceId,
       workspaceDirectory,
@@ -3306,11 +3382,13 @@ function WorkspaceScreenContent({
       showPullRequest: hasPullRequest,
       showBrowser: showCreateBrowserTab,
       showSimulator: Boolean(getDesktopHost()?.simulator),
+      showOpenDesign,
       terminalDisabled: createTerminalDisabled,
       launch: launchWorkspaceTab,
     }),
     [
       createTerminalDisabled,
+      showOpenDesign,
       hasPullRequest,
       isGitCheckout,
       launchWorkspaceTab,

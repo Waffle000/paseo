@@ -1,7 +1,7 @@
 npmRebuild: false
 appId: sh.paseo.desktop
-productName: Paseo
-executableName: Paseo
+productName: MeowSh
+executableName: MeowSh
 protocols:
   - name: Paseo agent link
     schemes:
@@ -46,7 +46,7 @@ publish:
   owner: Waffle000
   repo: paseo
 mac:
-  artifactName: "Paseo-${version}-${arch}.${ext}"
+  artifactName: "MeowSh-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns

@@ -89,6 +89,10 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
   simulator: {
     open: () => ipcRenderer.invoke("paseo:simulator:open"),
   },
+  openDesign: {
+    open: (cwd: string) => ipcRenderer.invoke("meowsh:design:open", cwd),
+    handoff: (cwd: string) => ipcRenderer.invoke("meowsh:design:handoff", cwd),
+  },
   diagram: {
     open: () => ipcRenderer.invoke("paseo:diagram:open"),
   },
