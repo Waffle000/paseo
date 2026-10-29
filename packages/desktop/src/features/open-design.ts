@@ -5,6 +5,11 @@ import http, { type Server } from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import {
+  DESIGN_APPEARANCE_CSS,
+  DESIGN_APPEARANCE_SCRIPT,
+  decorateDesignDocument,
+} from "./open-design-appearance.js";
 
 interface DesignProject {
   id: string;
@@ -150,18 +155,56 @@ async function start(): Promise<Runtime> {
       return;
     }
     const pathname = new URL(req.url || "/", origin).pathname;
+    if (pathname === "/__meowsh/appearance.css" || pathname === "/__meowsh/appearance.js") {
+      const css = pathname.endsWith(".css");
+      res.writeHead(200, {
+        "content-type": css ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(css ? DESIGN_APPEARANCE_CSS : DESIGN_APPEARANCE_SCRIPT);
+      return;
+    }
     const backendPort = /^\/(?:api|artifacts|frames)(?:\/|$)/.test(pathname) ? daemonPort : webPort;
+    const webDocument = backendPort === webPort && (req.headers.accept || "").includes("text/html");
+    const upstreamHeaders = webDocument
+      ? { ...req.headers, "accept-encoding": "identity" }
+      : req.headers;
+    if (webDocument) {
+      delete upstreamHeaders["if-none-match"];
+      delete upstreamHeaders["if-modified-since"];
+    }
     const upstream = http.request(
       {
         host: "127.0.0.1",
         port: backendPort,
         path: req.url,
         method: req.method,
-        headers: req.headers,
+        headers: upstreamHeaders,
       },
       (response) => {
-        res.writeHead(response.statusCode || 502, response.headers);
-        response.pipe(res);
+        response.once("error", () => {
+          if (res.destroyed) return;
+          if (!res.headersSent) res.writeHead(502);
+          res.end("Open Design document unavailable");
+        });
+        if (
+          webDocument &&
+          response.headers["content-type"]?.includes("text/html") &&
+          !response.headers["content-encoding"]
+        ) {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () => {
+            const headers = { ...response.headers, "cache-control": "no-store" };
+            delete headers["content-length"];
+            delete headers.etag;
+            res.writeHead(response.statusCode || 502, headers);
+            res.end(decorateDesignDocument(Buffer.concat(chunks).toString("utf8")));
+          });
+        } else {
+          res.writeHead(response.statusCode || 502, response.headers);
+          response.pipe(res);
+        }
       },
     );
     upstream.on("error", () => {

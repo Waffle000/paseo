@@ -177,8 +177,9 @@ export function getActivePaseoBrowserWebContentsForHostWindow(
 function preventUnsafeBrowserWebviewNavigation(
   event: { preventDefault: () => void },
   url: string | undefined,
+  subframeSourceUrl?: string,
 ): void {
-  if (!isAllowedBrowserWebviewUrl(url)) {
+  if (!isAllowedBrowserWebviewUrl(url, subframeSourceUrl)) {
     event.preventDefault();
   }
 }
@@ -188,7 +189,11 @@ export function registerBrowserWebviewNavigationGuards(contents: WebContents): v
     preventUnsafeBrowserWebviewNavigation(event, event.url);
   });
   contents.on("will-frame-navigate", (event) => {
-    preventUnsafeBrowserWebviewNavigation(event, event.url);
+    preventUnsafeBrowserWebviewNavigation(
+      event,
+      event.url,
+      event.isMainFrame === false ? contents.getURL() : undefined,
+    );
   });
   contents.on("will-redirect", (event) => {
     preventUnsafeBrowserWebviewNavigation(event, event.url);

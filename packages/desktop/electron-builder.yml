@@ -1,9 +1,9 @@
 npmRebuild: false
-appId: sh.paseo.desktop
+appId: sh.meowsh.desktop
 productName: MeowSh
 executableName: MeowSh
 protocols:
-  - name: Paseo agent link
+  - name: MeowSh agent link
     schemes:
       - paseo
 afterPack: ./scripts/after-pack.js

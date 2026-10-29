@@ -68,14 +68,27 @@ export class PendingBrowserWindowOpenRequests {
   }
 }
 
-export function isAllowedBrowserWebviewUrl(value: string | undefined): boolean {
+export function isAllowedBrowserWebviewUrl(
+  value: string | undefined,
+  subframeSourceUrl?: string,
+): boolean {
   if (!value) {
     return true;
   }
   try {
     const parsed = new URL(value);
+    if (
+      parsed.protocol === "http:" ||
+      parsed.protocol === "https:" ||
+      parsed.href === "about:blank"
+    )
+      return true;
+    // Preview documents may use object URLs, but never as the top-level page.
     return (
-      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.href === "about:blank"
+      parsed.protocol === "blob:" &&
+      subframeSourceUrl !== undefined &&
+      parsed.origin !== "null" &&
+      parsed.origin === new URL(subframeSourceUrl).origin
     );
   } catch {
     return false;

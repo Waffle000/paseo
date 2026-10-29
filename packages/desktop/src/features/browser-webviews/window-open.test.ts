@@ -1,6 +1,36 @@
 import { describe, expect, it } from "vitest";
 
 import { decideBrowserWindowOpenRequest, PendingBrowserWindowOpenRequests } from ".";
+import { isAllowedBrowserWebviewUrl } from "./window-open.js";
+
+describe("browser preview frame navigation", () => {
+  it("allows a document's own blob preview inside a child frame", () => {
+    expect(
+      isAllowedBrowserWebviewUrl(
+        "blob:http://127.0.0.1:57771/preview",
+        "http://127.0.0.1:57771/projects/design",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps blob URLs blocked for the main document and foreign frame origins", () => {
+    const preview = "blob:https://design.example/preview";
+    expect(isAllowedBrowserWebviewUrl(preview)).toBe(false);
+    expect(isAllowedBrowserWebviewUrl(preview, "https://other.example/")).toBe(false);
+    expect(
+      isAllowedBrowserWebviewUrl("blob:http://localhost:7000/preview", "http://localhost:7001/"),
+    ).toBe(false);
+  });
+
+  it.each([
+    "file:///etc/passwd",
+    "javascript:alert(1)",
+    "data:text/html,unsafe",
+    "blob:null/preview",
+  ])("rejects unsafe or opaque child-frame navigation: %s", (url) => {
+    expect(isAllowedBrowserWebviewUrl(url, "https://design.example/")).toBe(false);
+  });
+});
 
 describe("browser webview window-open requests", () => {
   it("routes foreground tabs to a Paseo workspace tab", () => {

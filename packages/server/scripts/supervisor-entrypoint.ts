@@ -15,7 +15,7 @@ import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 
-process.title = "Paseo Supervisor";
+process.title = "MeowSh Supervisor";
 
 interface DaemonRunnerConfig {
   devMode: boolean;
