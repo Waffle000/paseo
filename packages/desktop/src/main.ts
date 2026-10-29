@@ -611,10 +611,7 @@ function getWindowIconCandidates(): string[] {
       path.resolve(__dirname, "../assets/icon.png"),
     ];
   }
-  return [
-    path.resolve(__dirname, "../assets/icon-dev.png"),
-    path.resolve(__dirname, "../assets/icon.png"),
-  ];
+  return [path.resolve(__dirname, "../assets/icon.png")];
 }
 
 function getWindowIconPath(): string | null {
@@ -651,8 +648,8 @@ async function getEffectiveAppIconPath(): Promise<string | null> {
 }
 
 async function applyAppIcon(): Promise<void> {
-  // Packaged apps keep the bundle icon and its macOS system appearance.
-  if (app.isPackaged || process.platform !== "darwin") {
+  // Preserve the app identity without letting macOS reuse its old cached icon.
+  if (process.platform !== "darwin") {
     return;
   }
 

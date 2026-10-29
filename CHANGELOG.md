@@ -3,6 +3,7 @@
 ## Personal workbench
 
 - Branded the macOS bundle as MeowSh with an original full-color striped-cat icon, preserving the existing desktop profile, daemon home, pairing identity, and selected theme. Each in-app logo owns its SVG gradient so retained screens cannot turn another logo black.
+- Reused the full-color MeowSh logo on the startup splash instead of its duplicated Paseo shimmer mask, and explicitly applied the cat icon to macOS Dock/App Switcher surfaces without changing the selected theme.
 - Integrated the separately installed local Open Design runtime into workspace tabs, with canonical folder linking and explicit same-workspace handoff to a new or existing coding agent.
 - Documented the existing split-pane menu for side-by-side coding, design, and emulator preview.
 - Added built-in PDF and video file-tab panels; hidden video tabs pause playback.
