@@ -82,7 +82,11 @@ async function start(): Promise<Runtime> {
     process.env.MEOWSH_OPEN_DESIGN_APP ||
     path.join(os.homedir(), ".local/share/meowsh/open-design/Open Design.app");
   const resources = path.join(bundle, "Contents/Resources");
-  const executable = path.join(bundle, "Contents/MacOS/Open Design");
+  // Keep Open Design's Node ABI, but use its LSUIElement helper instead of the Dock-visible app.
+  const executable = path.join(
+    bundle,
+    "Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper",
+  );
   try {
     await stat(executable);
   } catch {
