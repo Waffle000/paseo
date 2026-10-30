@@ -9,6 +9,7 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
+import { groupUsageReports } from "./model";
 import type { UsageView } from "./types";
 
 export function UsageSection({
@@ -74,11 +75,12 @@ export function UsageBody({
     );
   }
 
-  if (view.reports.length === 0) {
+  const groups = groupUsageReports(view.reports);
+  if (groups.length === 0) {
     return <UsageMessage text={t("providerUsage.empty")} />;
   }
 
-  return <UsageList serverId={serverId} reports={view.reports} display={display} />;
+  return <UsageList serverId={serverId} groups={groups} display={display} />;
 }
 
 export function UsageMessage({ text }: { text: string }) {

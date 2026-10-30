@@ -4,6 +4,47 @@ import { usageCopy } from "./copy";
 import type { UsageDisplayAs } from "./preferences";
 import type { UsageReport, UsageReportEntry, UsageView, UsageWindow } from "./types";
 
+export interface UsageReportGroup {
+  id: string;
+  label: string;
+  collapsible: boolean;
+  reports: UsageReportEntry[];
+}
+
+/** 9router's plan label is provider · plan; plans share a provider disclosure. */
+export function groupUsageReports(reports: readonly UsageReportEntry[]): UsageReportGroup[] {
+  const groups: UsageReportGroup[] = [];
+  const providers = new Map<string, UsageReportGroup>();
+  for (const entry of reports) {
+    if (entry.report.status === "unavailable") continue;
+    if (entry.sourceId !== "ninerouter") {
+      groups.push({
+        id: `report:${entry.id}`,
+        label: entry.sourceLabel,
+        collapsible: false,
+        reports: [entry],
+      });
+      continue;
+    }
+    const report =
+      entry.report.status === "available" ? entry.report : entry.lastSuccessful?.report;
+    const provider = report?.planLabel?.split(" · ", 1)[0] || entry.sourceLabel;
+    let group = providers.get(provider);
+    if (!group) {
+      group = {
+        id: `ninerouter:${provider}`,
+        label: provider === entry.sourceLabel ? provider : `${entry.sourceLabel} · ${provider}`,
+        collapsible: true,
+        reports: [],
+      };
+      providers.set(provider, group);
+      groups.push(group);
+    }
+    group.reports.push(entry);
+  }
+  return groups;
+}
+
 export function usedPercent(window: UsageWindow): number | null {
   if (window.usedPct != null) return window.usedPct;
   if (window.remainingPct != null) return 100 - window.remainingPct;

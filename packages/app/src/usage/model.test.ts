@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
+  groupUsageReports,
   resolveUsageReport,
   displayPercent,
   resolveAgentUsageView,
@@ -37,6 +38,71 @@ function entry(input: {
     },
   };
 }
+
+function reportId(report: UsageReportEntry): string {
+  return report.id;
+}
+
+describe("groupUsageReports", () => {
+  it("groups 9router accounts by provider across plans without merging other sources", () => {
+    const account = (id: string, planLabel: string): UsageReportEntry => ({
+      ...entry({ sourceId: "ninerouter", planLabel }),
+      id,
+      sourceLabel: "9router",
+    });
+    const reports = [
+      account("claude-a", "Claude Code · Pro"),
+      account("codex-a", "OpenAI Codex · Business"),
+      account("claude-b", "Claude Code · Max"),
+      { ...entry({ sourceId: "claude", planLabel: "Pro" }), id: "direct-claude" },
+    ];
+    expect(
+      groupUsageReports(reports).map((group) => ({
+        label: group.label,
+        collapsible: group.collapsible,
+        ids: group.reports.map(reportId),
+      })),
+    ).toEqual([
+      { label: "9router · Claude Code", collapsible: true, ids: ["claude-a", "claude-b"] },
+      { label: "9router · OpenAI Codex", collapsible: true, ids: ["codex-a"] },
+      { label: "Fixture source", collapsible: false, ids: ["direct-claude"] },
+    ]);
+    expect(reports.map((report) => report.id)).toEqual([
+      "claude-a",
+      "codex-a",
+      "claude-b",
+      "direct-claude",
+    ]);
+  });
+
+  it("hides unavailable accounts including retained data, but keeps actual errors and valid quotas", () => {
+    const available = entry({ sourceId: "ninerouter", planLabel: "Claude Code" });
+    const missing: UsageReportEntry = {
+      ...available,
+      id: "missing",
+      report: { status: "unavailable", problem: { kind: "no_quota", detail: "No quota windows" } },
+    };
+    const retained: UsageReportEntry = {
+      ...missing,
+      id: "retained",
+      lastSuccessful: {
+        fetchedAt: available.fetchedAt,
+        report: available.report as Extract<UsageReportEntry["report"], { status: "available" }>,
+      },
+    };
+    const failed: UsageReportEntry = {
+      ...available,
+      id: "failed",
+      report: { status: "error", error: "HTTP 500" },
+    };
+    expect(
+      groupUsageReports([missing, retained, available, failed]).flatMap((group) =>
+        group.reports.map(reportId),
+      ),
+    ).toEqual([available.id, "failed"]);
+    expect(groupUsageReports([missing, retained])).toEqual([]);
+  });
+});
 
 function ready(data: UsageReportEntry[]): UsageQueryState {
   return { data, error: null, isFetching: false };
