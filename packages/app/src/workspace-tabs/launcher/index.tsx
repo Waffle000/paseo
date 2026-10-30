@@ -89,7 +89,6 @@ const BUILT_IN_SELECTIONS = {
   browser: { kind: "browser" },
   simulator: { kind: "simulator" },
   openDesign: { kind: "open-design" },
-  designAgent: { kind: "design-agent" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
 
@@ -206,15 +205,6 @@ export function useWorkspaceTabLaunchCatalog(input: {
         panelKind: "browser",
         hidden: !launcher.showOpenDesign,
         launch: launchSelection(BUILT_IN_SELECTIONS.openDesign),
-      },
-      designAgent: {
-        id: "design-agent",
-        label: "Agent from Open Design",
-        Icon: SquarePen,
-        disabled: false,
-        panelKind: "draft",
-        hidden: !launcher.showOpenDesign,
-        launch: launchSelection(BUILT_IN_SELECTIONS.designAgent),
       },
       pullRequest: {
         id: "pull-request",

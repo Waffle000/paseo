@@ -136,8 +136,6 @@ import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
-import { buildDraftStoreKey } from "@/stores/draft-keys";
-import { useDraftStore } from "@/stores/draft-store";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { OpenDesignMenu } from "@/workspace-tabs/open-design-menu";
 import { resolveWorkspaceRouteId } from "@/utils/workspace-identity";
@@ -1869,23 +1867,16 @@ function WorkspaceScreenContent({
     [createWorkspaceTab, persistenceKey],
   );
 
-  const handleDesignHandoff = useStableEvent(async (agentId?: string) => {
+  const handleDesignHandoff = useStableEvent(async (agentId: string) => {
     if (!showOpenDesign || !workspaceDirectory || !persistenceKey) return;
     try {
       const text = await getDesktopHost()!.openDesign!.handoff(workspaceDirectory);
-      if (agentId) {
-        const agent = useSessionStore.getState().sessions[normalizedServerId]?.agents.get(agentId);
-        if (!agent || agent.workspaceId !== normalizedWorkspaceId || agent.archivedAt)
-          throw new Error("The selected agent no longer belongs to this workspace.");
-        if (!client) throw new Error("The workspace host is disconnected.");
-        await client.sendAgentMessage(agentId, text, { activeTurnBehavior: "steer" });
-        openWorkspaceTabFocused(persistenceKey, { kind: "agent", agentId });
-        return;
-      }
-      const draftId = generateDraftId();
-      const draftKey = buildDraftStoreKey({ serverId: normalizedServerId, agentId: "", draftId });
-      useDraftStore.getState().editDraftText({ draftKey, text });
-      openWorkspaceTabFocused(persistenceKey, { kind: "draft", draftId });
+      const agent = useSessionStore.getState().sessions[normalizedServerId]?.agents.get(agentId);
+      if (!agent || agent.workspaceId !== normalizedWorkspaceId || agent.archivedAt)
+        throw new Error("The selected agent no longer belongs to this workspace.");
+      if (!client) throw new Error("The workspace host is disconnected.");
+      await client.sendAgentMessage(agentId, text, { activeTurnBehavior: "steer" });
+      openWorkspaceTabFocused(persistenceKey, { kind: "agent", agentId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
@@ -1935,10 +1926,6 @@ function WorkspaceScreenContent({
           );
         return;
       }
-      if (selection.kind === "design-agent") {
-        void handleDesignHandoff();
-        return;
-      }
       if (selection.kind === "simulator") {
         const simulator = getDesktopHost()?.simulator;
         if (!simulator) return;
@@ -1965,7 +1952,6 @@ function WorkspaceScreenContent({
       toast,
       showOpenDesign,
       workspaceDirectory,
-      handleDesignHandoff,
     ],
   );
   const handleOpenDesignTab = useCallback(

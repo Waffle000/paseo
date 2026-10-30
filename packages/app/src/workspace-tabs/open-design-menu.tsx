@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { Text } from "react-native";
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ export function OpenDesignMenu({
   serverId: string;
   workspaceId: string;
   onOpen: () => void;
-  onHandoff: (agentId?: string) => void;
+  onHandoff: (agentId: string) => void;
 }) {
   const directory = useSessionStore((state) => state.sessions[serverId]?.agents);
   const agents = useMemo(
@@ -34,7 +34,6 @@ export function OpenDesignMenu({
         })),
     [directory, workspaceId, onHandoff],
   );
-  const handleNewAgent = useCallback(() => onHandoff(), [onHandoff]);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -47,9 +46,6 @@ export function OpenDesignMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem onSelect={onOpen}>Open Design</DropdownMenuItem>
-        <DropdownMenuItem onSelect={handleNewAgent}>
-          Prepare design for a new agent
-        </DropdownMenuItem>
         {agents.map((agent) => (
           <DropdownMenuItem key={agent.id} onSelect={agent.select}>
             Send design context to {agent.label}

@@ -7,7 +7,6 @@ export const PRIMARY_LAUNCH_ORDER = [
   "browser",
   "simulator",
   "openDesign",
-  "designAgent",
   "pullRequest",
 ] as const;
 
@@ -20,7 +19,6 @@ export const SUPPORTING_LAUNCH_ORDER = [
   "browser",
   "simulator",
   "openDesign",
-  "designAgent",
   "pullRequest",
 ] as const;
 
