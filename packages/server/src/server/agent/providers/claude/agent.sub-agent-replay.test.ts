@@ -222,7 +222,6 @@ describe("ClaudeAgentSession persisted subagent replay", () => {
     const client = new ClaudeAgentClient({
       logger,
       queryFactory,
-      resolveVersion: async () => "2.1.220",
     });
     const session = await client.resumeSession(
       { provider: "claude", sessionId: "replay-session" },
@@ -484,7 +483,7 @@ describe("ClaudeAgentSession persisted subagent replay", () => {
       status: "running",
     });
     expect(events).toContainEqual(
-      expect.objectContaining({ subtitle: "Workflow · Sonnet 5 · 20.4k tokens" }),
+      expect.objectContaining({ subtitle: "Workflow · claude-sonnet-5 · 20.4k tokens" }),
     );
     expect(events.at(-1)).toMatchObject({
       id: WORKFLOW_TOOL_USE_ID,

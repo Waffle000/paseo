@@ -30,14 +30,39 @@ describe("formatThinkingOptionLabel", () => {
     expect(formatThinkingOptionLabel({ id: "xhigh", label: "XHigh" })).toBe("Extra high");
   });
 
-  it("preserves provider-supplied xhigh labels with extra detail", () => {
+  it("preserves native Claude labels verbatim instead of formatting their ids", () => {
+    const metadata = { source: "claude-code-disk-cache" };
+
+    expect(formatThinkingOptionLabel({ id: "xhigh", label: "Extra", metadata })).toBe("Extra");
+    expect(formatThinkingOptionLabel({ id: "off", label: "No thinking", metadata })).toBe(
+      "No thinking",
+    );
+    expect(formatThinkingOptionLabel({ id: "ultra", label: "UltraCode", metadata })).toBe(
+      "UltraCode",
+    );
+    expect(formatThinkingOptionLabel({ id: "xhigh", label: "  Extra  ", metadata })).toBe(
+      "  Extra  ",
+    );
+  });
+
+  it("falls back to the option id only when the native label is missing", () => {
+    const metadata = { source: "claude-code-disk-cache" };
+
+    expect(formatThinkingOptionLabel({ id: "xhigh", metadata })).toBe("Extra high");
+    expect(formatThinkingOptionLabel({ id: "xhigh", label: null, metadata })).toBe("Extra high");
+    expect(formatThinkingOptionLabel({ id: "xhigh", label: "", metadata })).toBe("");
+  });
+
+  it("retains formatting for options from other sources", () => {
+    expect(
+      formatThinkingOptionLabel({
+        id: "xhigh",
+        label: "XHigh",
+        metadata: { source: "another-provider" },
+      }),
+    ).toBe("Extra high");
     expect(formatThinkingOptionLabel({ id: "xhigh", label: "XHigh (56 | 8m)" })).toBe(
       "X high (56 | 8m)",
     );
-    expect(formatThinkingOptionLabel({ id: "xhigh", label: "XHigh (45 | 6m)" })).toBe(
-      "X high (45 | 6m)",
-    );
-    expect(formatThinkingOptionLabel({ id: "xhigh" })).toBe("Extra high");
-    expect(formatThinkingOptionLabel({ id: "xhigh", label: "Extra high" })).toBe("Extra high");
   });
 });

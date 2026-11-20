@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { promises } from "node:fs";
 import path from "node:path";
 import { LRUCache } from "lru-cache";
+import { findExecutableWithoutProbing } from "../../../../executable-resolution/executable-resolution.js";
 import { createImportDescriptorScheduler } from "./import-descriptor-scheduler.js";
 import {
   type AgentDefinition,
@@ -32,18 +33,12 @@ import {
   mapTaskNotificationUserContentToToolCall,
   readTaskNotificationToolUseIdFromHistoryRecord,
 } from "./task-notification-tool-call.js";
+import { getClaudeContextWindowMaxTokens, normalizeClaudeRuntimeModelId } from "./models.js";
 import {
-  getClaudeContextWindowMaxTokens,
-  getClaudeModelsWithSettings,
-  normalizeClaudeRuntimeModelId,
-  resolveConfiguredClaudeModel,
-} from "./models.js";
-import {
-  CLAUDE_DISABLED_THINKING_OPTION_ID,
-  CLAUDE_ULTRACODE_THINKING_OPTION_ID,
-  parseClaudeCodeVersion,
-  resolveClaudeDisabledThinkingForModel,
-} from "./model-manifest.js";
+  findClaudeNativeModel,
+  readClaudeNativeCatalog,
+  type ClaudeNativeCatalog,
+} from "./native-catalog.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
 import { readClaudeSubagentHandback } from "./subagent-handback.js";
@@ -78,7 +73,6 @@ import {
   type ClaudeProviderOptions,
 } from "./options.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
-import { discoverClaudeModels } from "./model-discovery.js";
 import { claudeQuery, type ClaudeOptions, type ClaudeQueryFactory } from "./query.js";
 import {
   realClaudeRewindSdk,
@@ -106,7 +100,6 @@ import {
   type AgentLaunchContext,
   type AgentMetadata,
   type AgentMode,
-  type AgentModelDefinition,
   type AgentPermissionRequest,
   type AgentPermissionRequestKind,
   type AgentPermissionResponse,
@@ -459,13 +452,12 @@ export interface ClaudeContentChunk {
 }
 
 interface ClaudeAgentClientOptions {
-  discoverModels?: typeof discoverClaudeModels;
+  readCatalog?: typeof readClaudeNativeCatalog;
   defaults?: { agents?: Record<string, AgentDefinition> };
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
   queryFactory?: ClaudeQueryFactory;
   resolveBinary?: () => Promise<string>;
-  resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
 }
 
@@ -474,6 +466,7 @@ type ClaudeImportDescriptorResult =
   | { type: "unreadable"; error: Error };
 
 interface ClaudeAgentSessionOptions {
+  catalog?: ClaudeNativeCatalog;
   defaults?: { agents?: Record<string, AgentDefinition> };
   runtimeSettings?: ProviderRuntimeSettings;
   handle?: AgentPersistenceHandle;
@@ -486,11 +479,10 @@ interface ClaudeAgentSessionOptions {
   rewindSdk?: ClaudeRewindSdk;
 }
 
+const CLAUDE_DISABLED_THINKING_OPTION_ID = "off";
+
 type ClaudeThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
-type ClaudeThinkingOption =
-  | ClaudeThinkingEffort
-  | typeof CLAUDE_DISABLED_THINKING_OPTION_ID
-  | typeof CLAUDE_ULTRACODE_THINKING_OPTION_ID;
+type ClaudeThinkingOption = ClaudeThinkingEffort | typeof CLAUDE_DISABLED_THINKING_OPTION_ID;
 
 function resolvePathEnvKey(): "Path" | "PATH" | null {
   if (process.env["Path"] !== undefined) return "Path";
@@ -547,23 +539,18 @@ function isClaudeThinkingEffort(value: string | null | undefined): value is Clau
 }
 
 function isClaudeThinkingOption(value: string | null | undefined): value is ClaudeThinkingOption {
-  return (
-    value === CLAUDE_DISABLED_THINKING_OPTION_ID ||
-    value === CLAUDE_ULTRACODE_THINKING_OPTION_ID ||
-    isClaudeThinkingEffort(value)
-  );
+  return value === CLAUDE_DISABLED_THINKING_OPTION_ID || isClaudeThinkingEffort(value);
 }
 
 function assertClaudeThinkingOptionSupported(
+  catalog: ClaudeNativeCatalog | undefined,
   modelId: string | null | undefined,
   thinkingOptionId: string | null | undefined,
 ): void {
-  if (
-    thinkingOptionId !== CLAUDE_DISABLED_THINKING_OPTION_ID ||
-    resolveClaudeDisabledThinkingForModel(modelId).supported
-  ) {
-    return;
-  }
+  if (!thinkingOptionId || thinkingOptionId === "default") return;
+  const model = catalog && findClaudeNativeModel(catalog, modelId);
+  if (model?.thinkingOptions?.some((option) => option.id === thinkingOptionId)) return;
+  if (!model && isClaudeThinkingOption(thinkingOptionId)) return;
   throw new Error(
     `Thinking option '${thinkingOptionId}' is not available for model '${modelId ?? "default"}'`,
   );
@@ -1566,7 +1553,7 @@ export function readEventIdentifiers(message: SDKMessage): EventIdentifiers {
 }
 
 export class ClaudeAgentClient implements AgentClient {
-  private readonly discoverModels: typeof discoverClaudeModels;
+  private readonly readCatalog: typeof readClaudeNativeCatalog;
   readonly provider = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
 
@@ -1575,7 +1562,6 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
-  private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly rewindSdk: ClaudeRewindSdk;
   private readonly scheduleImportDescriptors = createImportDescriptorScheduler(
     (candidate: ClaudeSessionCandidate, signal) => this.readImportDescriptor(candidate, signal),
@@ -1588,20 +1574,13 @@ export class ClaudeAgentClient implements AgentClient {
   });
 
   constructor(options: ClaudeAgentClientOptions) {
-    this.discoverModels = options.discoverModels ?? discoverClaudeModels;
+    this.readCatalog = options.readCatalog ?? readClaudeNativeCatalog;
     this.defaults = options.defaults;
     this.logger = options.logger.child({ module: "agent", provider: "claude" });
     this.runtimeSettings = options.runtimeSettings;
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary ?? (() => resolveClaudeBinary(this.runtimeSettings));
-    this.resolveVersion =
-      options.resolveVersion ??
-      ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
-  }
-
-  resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
-    return resolveConfiguredClaudeModel(model);
   }
 
   async createSession(
@@ -1611,6 +1590,7 @@ export class ClaudeAgentClient implements AgentClient {
   ): Promise<AgentSession> {
     const claudeConfig = this.assertConfig(config);
     return new ClaudeAgentSession(claudeConfig, {
+      catalog: await this.readSessionCatalog(launchContext?.env),
       defaults: this.defaults,
       runtimeSettings: this.runtimeSettings,
       agentId: launchContext?.agentId,
@@ -1640,6 +1620,7 @@ export class ClaudeAgentClient implements AgentClient {
     };
     const claudeConfig = this.assertConfig(mergedConfig);
     return new ClaudeAgentSession(claudeConfig, {
+      catalog: await this.readSessionCatalog(launchContext?.env),
       defaults: this.defaults,
       runtimeSettings: this.runtimeSettings,
       handle,
@@ -1652,60 +1633,55 @@ export class ClaudeAgentClient implements AgentClient {
     });
   }
 
+  private async readNativeCatalog(
+    env: NodeJS.ProcessEnv,
+    signal?: AbortSignal,
+  ): Promise<ClaudeNativeCatalog> {
+    const launch = await resolveProviderLaunch({
+      commandConfig: this.runtimeSettings?.command,
+      defaultBinary: "claude",
+    });
+    const claudeExecutablePath = await findExecutableWithoutProbing(launch.command, {
+      cwd: process.cwd(),
+      path: env.PATH ?? env.Path,
+    });
+    return this.readCatalog({
+      configDir: claudeConfigDir(env),
+      env,
+      signal,
+      claudeExecutablePath: claudeExecutablePath ?? undefined,
+    });
+  }
+
+  private async readSessionCatalog(
+    launchEnv?: Record<string, string>,
+  ): Promise<ClaudeNativeCatalog | undefined> {
+    const env = this.buildProviderEnv(launchEnv);
+    try {
+      return await this.readNativeCatalog(env);
+    } catch (error) {
+      this.logger.warn(
+        { code: error instanceof Error && "code" in error ? error.code : "unavailable" },
+        "Native Claude catalog unavailable for session metadata",
+      );
+      return undefined;
+    }
+  }
+
   async getCatalogCacheKey(_options: FetchCatalogOptions): Promise<string> {
-    // This client discovers through host configuration, independent of project cwd.
-    return "host";
+    const env = this.buildProviderEnv();
+    return (await this.readNativeCatalog(env)).cacheKey;
   }
 
   async fetchCatalog(
     _options: FetchCatalogOptions,
     context?: ProviderRefreshContext,
   ): Promise<ProviderCatalog> {
-    // Claude exposes a global catalog here; cwd/force are intentionally irrelevant.
-    let claudeCodeVersion: string | undefined;
-    try {
-      claudeCodeVersion = await runProviderRefreshActivity(context, "version", () =>
-        this.resolveVersion(context?.signal),
-      );
-    } catch (error) {
-      this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
-    }
     const env = this.buildProviderEnv();
-    let discoveredModelIds = new Set<string>();
-    try {
-      const advertisedModels = await runProviderRefreshActivity(context, "models", () =>
-        this.discoverModels({
-          resolveBinary: this.resolveBinary,
-          runtimeSettings: this.runtimeSettings,
-          env,
-          signal: context?.signal,
-        }),
-      );
-      discoveredModelIds = new Set(
-        advertisedModels
-          .map((model) => normalizeClaudeRuntimeModelId(model.resolvedModel ?? model.value))
-          .filter((id): id is string => id !== null),
-      );
-    } catch (error) {
-      context?.signal.throwIfAborted();
-      this.logger.warn(
-        { err: error },
-        "Claude model discovery failed; omitting discovery-required models",
-      );
-    }
-    const models = await runProviderRefreshActivity(context, "settings", () =>
-      getClaudeModelsWithSettings(
-        this.logger,
-        claudeConfigDir(env),
-        claudeCodeVersion,
-        discoveredModelIds,
-      ),
+    const catalog = await runProviderRefreshActivity(context, "models", () =>
+      this.readNativeCatalog(env, context?.signal),
     );
-    const modeCatalog = claudeModeCatalog(env);
-    return {
-      models,
-      ...modeCatalog,
-    };
+    return { models: catalog.models, ...claudeModeCatalog(env) };
   }
 
   async resolveDefaultModeId({ env: launchEnv }: ResolveAgentDefaultModeInput): Promise<string> {
@@ -1723,6 +1699,7 @@ export class ClaudeAgentClient implements AgentClient {
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     const claudeConfig = this.assertConfig(config);
     return buildClaudeFeatures({
+      catalog: await this.readSessionCatalog(),
       modelId: claudeConfig.model,
       fastModeEnabled: claudeConfig.featureValues?.fast_mode === true,
     });
@@ -1822,8 +1799,12 @@ export class ClaudeAgentClient implements AgentClient {
       commandConfig: this.runtimeSettings?.command,
       defaultBinary: "claude",
     });
-    const availability = await checkProviderLaunchAvailable(launch);
-    return availability.available;
+    const env = this.buildProviderEnv();
+    const executable = await findExecutableWithoutProbing(launch.command, {
+      cwd: process.cwd(),
+      path: env.PATH ?? env.Path,
+    });
+    return executable !== null;
   }
 
   async getDiagnostic(): Promise<{ diagnostic: string }> {
@@ -1901,17 +1882,13 @@ export async function resolveClaudeCodeVersion(
     timeout: 5_000,
     signal,
   });
-  // A wrapper command (the `command` provider setting) prints its own version here
-  // instead of Claude Code's. Only trust output that identifies itself as Claude Code,
-  // so a wrapper's version can't mis-gate models behind a minimumClaudeCodeVersion.
+  // A command wrapper can report its own version; diagnostics must identify Claude Code.
   const rawVersionOutput = `${stdout}\n${stderr}`;
-  const version = /\d+\.\d+\.\d+\s+\(Claude Code\)/i.test(rawVersionOutput)
-    ? parseClaudeCodeVersion(rawVersionOutput)
-    : null;
+  const version = rawVersionOutput.match(/(\d+\.\d+\.\d+)\s+\(Claude Code\)/i)?.[1];
   if (!version) {
     throw new Error("Unable to parse Claude Code version from --version output");
   }
-  return version.join(".");
+  return version;
 }
 
 async function resolveClaudeAuth(
@@ -2352,6 +2329,7 @@ class ClaudeAgentSession implements AgentSession {
   private foregroundHasVisibleActivity = false;
   private activeTurnHasAssistantText = false;
   private readonly contextUsage: ClaudeContextUsageState;
+  private readonly catalog?: ClaudeNativeCatalog;
   private userMessageIds: string[] = [];
   private readonly emittedUserMessageIds = new Set<string>();
   private readonly rewindTurnAnchors: ClaudeRewindTurnAnchor[] = [];
@@ -2362,7 +2340,8 @@ class ClaudeAgentSession implements AgentSession {
 
   constructor(config: ClaudeAgentConfig, options: ClaudeAgentSessionOptions) {
     this.config = config;
-    assertClaudeThinkingOptionSupported(config.model, config.thinkingOptionId);
+    this.catalog = options.catalog;
+    assertClaudeThinkingOptionSupported(this.catalog, config.model, config.thinkingOptionId);
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
     this.defaults = options.defaults;
@@ -2374,7 +2353,7 @@ class ClaudeAgentSession implements AgentSession {
     this.resolveBinary = options.resolveBinary;
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
     this.contextUsage = new ClaudeContextUsageState(
-      getClaudeContextWindowMaxTokens(this.config.model),
+      getClaudeContextWindowMaxTokens(this.catalog, this.config.model),
     );
     const handle = options.handle;
 
@@ -2410,6 +2389,7 @@ class ClaudeAgentSession implements AgentSession {
 
   get features(): AgentFeature[] {
     return buildClaudeFeatures({
+      catalog: this.catalog,
       modelId: this.config.model,
       fastModeEnabled: this.config.featureValues?.fast_mode === true,
     });
@@ -2702,11 +2682,14 @@ class ClaudeAgentSession implements AgentSession {
     await activeQuery.setModel(normalizedModelId ?? undefined);
     this.config.model = normalizedModelId ?? undefined;
     this.reconcileThinkingOptionForModel(normalizedModelId);
-    if (!claudeModelSupportsFastMode(this.config.model) && this.config.featureValues?.fast_mode) {
+    if (
+      !claudeModelSupportsFastMode(this.catalog, this.config.model) &&
+      this.config.featureValues?.fast_mode
+    ) {
       await this.applyFastModeFeature(false, activeQuery);
     }
     this.contextUsage.setInitialContextWindowMaxTokens(
-      getClaudeContextWindowMaxTokens(this.config.model),
+      getClaudeContextWindowMaxTokens(this.catalog, this.config.model),
     );
     this.lastOptionsModel = normalizedModelId ?? this.lastOptionsModel;
     this.lastRuntimeModel = null;
@@ -2717,16 +2700,11 @@ class ClaudeAgentSession implements AgentSession {
 
   private reconcileThinkingOptionForModel(modelId: string | null): void {
     const thinkingOptionId = this.config.thinkingOptionId;
-    if (thinkingOptionId !== CLAUDE_DISABLED_THINKING_OPTION_ID) {
-      return;
-    }
-
-    const resolution = resolveClaudeDisabledThinkingForModel(modelId);
-    if (resolution.supported) {
-      return;
-    }
-
-    this.config.thinkingOptionId = resolution.fallbackThinkingOptionId;
+    if (!thinkingOptionId || thinkingOptionId === "default") return;
+    const model = this.catalog && findClaudeNativeModel(this.catalog, modelId);
+    if (model?.thinkingOptions?.some((option) => option.id === thinkingOptionId)) return;
+    if (!model && isClaudeThinkingOption(thinkingOptionId)) return;
+    this.config.thinkingOptionId = model?.defaultThinkingOptionId;
     this.queryRestartNeeded = true;
     this.pushEvent({
       type: "thinking_option_changed",
@@ -2744,7 +2722,11 @@ class ClaudeAgentSession implements AgentSession {
     if (!normalizedThinkingOptionId || normalizedThinkingOptionId === "default") {
       this.config.thinkingOptionId = undefined;
     } else if (isClaudeThinkingOption(normalizedThinkingOptionId)) {
-      assertClaudeThinkingOptionSupported(this.config.model, normalizedThinkingOptionId);
+      assertClaudeThinkingOptionSupported(
+        this.catalog,
+        this.config.model,
+        normalizedThinkingOptionId,
+      );
       this.config.thinkingOptionId = normalizedThinkingOptionId;
     } else {
       throw new Error(`Unknown thinking option: ${normalizedThinkingOptionId}`);
@@ -2761,7 +2743,7 @@ class ClaudeAgentSession implements AgentSession {
     }
 
     const enabled = Boolean(value);
-    if (enabled && !claudeModelSupportsFastMode(this.config.model)) {
+    if (enabled && !claudeModelSupportsFastMode(this.catalog, this.config.model)) {
       throw new Error(
         `Claude fast mode is not available for model '${this.config.model ?? "default"}'`,
       );
@@ -3503,31 +3485,25 @@ class ClaudeAgentSession implements AgentSession {
   private resolveThinkingConfig(): {
     thinking: ClaudeOptions["thinking"];
     effort: ClaudeOptions["effort"];
-    ultracode: boolean;
   } {
     const thinkingOptionId =
       this.config.thinkingOptionId && this.config.thinkingOptionId !== "default"
         ? this.config.thinkingOptionId
         : undefined;
-    assertClaudeThinkingOptionSupported(this.config.model, thinkingOptionId);
-    if (thinkingOptionId === CLAUDE_DISABLED_THINKING_OPTION_ID) {
-      return { thinking: { type: "disabled" }, effort: undefined, ultracode: false };
+    assertClaudeThinkingOptionSupported(this.catalog, this.config.model, thinkingOptionId);
+    if (thinkingOptionId && !isClaudeThinkingOption(thinkingOptionId)) {
+      throw new Error(`Unsupported Claude runtime thinking option: ${thinkingOptionId}`);
     }
-    if (thinkingOptionId === CLAUDE_ULTRACODE_THINKING_OPTION_ID) {
-      return {
-        thinking: { type: "adaptive", display: "summarized" },
-        effort: "xhigh",
-        ultracode: true,
-      };
+    if (thinkingOptionId === CLAUDE_DISABLED_THINKING_OPTION_ID) {
+      return { thinking: { type: "disabled" }, effort: undefined };
     }
     if (thinkingOptionId && isClaudeThinkingEffort(thinkingOptionId)) {
       return {
         thinking: { type: "adaptive", display: "summarized" },
         effort: thinkingOptionId,
-        ultracode: false,
       };
     }
-    return { thinking: undefined, effort: undefined, ultracode: false };
+    return { thinking: undefined, effort: undefined };
   }
 
   private buildAppendedSystemPrompt(): string {
@@ -3560,13 +3536,13 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async buildOptions(permissionMode: PermissionMode): Promise<ClaudeOptions> {
-    const { thinking, effort, ultracode } = this.resolveThinkingConfig();
+    const { thinking, effort } = this.resolveThinkingConfig();
     const appendedSystemPrompt = this.buildAppendedSystemPrompt();
     const providerOptions = applyClaudeToolPolicy(
       this.config.providerOptions,
       this.config.toolPolicy,
     );
-    const settingsOptions = this.buildSettingsOptions(providerOptions, { ultracode });
+    const settingsOptions = this.buildSettingsOptions(providerOptions);
     const sdkEnv = this.harnessEnvironment;
     assertClaudeModeCanRun(permissionMode, sdkEnv);
 
@@ -3653,26 +3629,24 @@ class ClaudeAgentSession implements AgentSession {
 
   private buildSettingsOptions(
     providerOptions: ClaudeProviderOptions,
-    input: { ultracode: boolean },
   ): Pick<ClaudeOptions, "settings"> | Record<string, never> {
     const fastMode = this.resolveFastModeSetting();
     // Internal agents do daemon work such as naming a branch, so the user's and
     // project's hooks must not run for them.
     const disableAllHooks = this.config.internal === true;
-    if (fastMode === null && !input.ultracode && !disableAllHooks) {
+    if (fastMode === null && !disableAllHooks) {
       return {};
     }
     return {
       settings: mergeClaudeSettings(providerOptions.settings, {
         ...(fastMode === null ? {} : { fastMode }),
-        ...(input.ultracode ? { ultracode: true } : {}),
         ...(disableAllHooks ? { disableAllHooks: true } : {}),
       }),
     };
   }
 
   private resolveFastModeSetting(): boolean | null {
-    if (!claudeModelSupportsFastMode(this.config.model)) {
+    if (!claudeModelSupportsFastMode(this.catalog, this.config.model)) {
       return null;
     }
     return this.config.featureValues?.fast_mode === true;
@@ -4973,13 +4947,16 @@ class ClaudeAgentSession implements AgentSession {
     this.observePermissionMode(message.permissionMode);
     this.persistence = null;
     if (message.model) {
-      const runtimeContextWindowMaxTokens = getClaudeContextWindowMaxTokens(message.model);
+      const runtimeContextWindowMaxTokens = getClaudeContextWindowMaxTokens(
+        this.catalog,
+        message.model,
+      );
       // Seed usage before the first result, including settings-resolved aliases.
       // A repeated init for the same model must retain the SDK's reported limit.
       if (message.model !== this.lastRuntimeModel && runtimeContextWindowMaxTokens !== undefined) {
         this.contextUsage.setInitialContextWindowMaxTokens(runtimeContextWindowMaxTokens);
       }
-      const normalizedRuntimeModel = normalizeClaudeRuntimeModelId(message.model);
+      const normalizedRuntimeModel = normalizeClaudeRuntimeModelId(this.catalog, message.model);
       this.logger.debug(
         { runtimeModel: message.model, normalizedRuntimeModel },
         "Captured runtime model from SDK init",

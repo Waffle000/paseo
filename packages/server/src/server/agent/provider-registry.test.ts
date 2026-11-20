@@ -11,16 +11,6 @@ import type {
   ProviderCatalog,
 } from "./agent-sdk-types.js";
 
-const CLAUDE_CUSTOM_THINKING_FIELDS = {
-  thinkingOptions: [
-    { id: "low", label: "Low" },
-    { id: "medium", label: "Medium" },
-    { id: "high", label: "High", isDefault: true },
-    { id: "max", label: "Max" },
-  ],
-  defaultThinkingOptionId: "high",
-} satisfies Partial<AgentModelDefinition>;
-
 const mockState = vi.hoisted(() => {
   interface ConstructorEntry {
     runtimeSettings?: unknown;
@@ -79,8 +69,7 @@ vi.mock("../../executable-resolution/executable-resolution.js", () => ({
   isCommandAvailable: mockState.isCommandAvailable,
 }));
 
-vi.mock("./providers/claude/agent.js", async () => {
-  const { resolveConfiguredClaudeModel } = await import("./providers/claude/models.js");
+vi.mock("./providers/claude/agent.js", () => {
   return {
     ClaudeAgentClient: class ClaudeAgentClient {
       readonly capabilities = {
@@ -114,10 +103,6 @@ vi.mock("./providers/claude/agent.js", async () => {
           models: mockState.runtimeModels.get(this.provider) ?? [],
           modes: [],
         };
-      }
-
-      resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
-        return resolveConfiguredClaudeModel(model);
       }
 
       async isAvailable(): Promise<boolean> {
@@ -1248,7 +1233,6 @@ describe("model merging", () => {
         provider: "claude",
         id: "profile-fast",
         label: "Profile Fast",
-        ...CLAUDE_CUSTOM_THINKING_FIELDS,
       },
     ]);
   });
@@ -1295,13 +1279,11 @@ describe("model merging", () => {
         provider: "claude",
         id: "shared-model",
         label: "Profile Label",
-        ...CLAUDE_CUSTOM_THINKING_FIELDS,
       },
       {
         provider: "claude",
         id: "profile-model",
         label: "Profile Model",
-        ...CLAUDE_CUSTOM_THINKING_FIELDS,
       },
     ]);
   });
@@ -1386,7 +1368,6 @@ describe("model merging", () => {
         id: "shared-model",
         label: "Profile Label",
         description: "Runtime description",
-        ...CLAUDE_CUSTOM_THINKING_FIELDS,
         metadata: {
           source: "runtime",
         },
@@ -1452,7 +1433,6 @@ describe("model merging", () => {
         id: "profile-default",
         label: "Profile Default",
         isDefault: true,
-        ...CLAUDE_CUSTOM_THINKING_FIELDS,
       },
     ]);
   });
@@ -1484,7 +1464,7 @@ describe("model merging", () => {
     ]);
   });
 
-  test("Claude configured models can override or disable inferred thinking options", async () => {
+  test("Claude configured models retain only explicit thinking options", async () => {
     const registry = buildProviderRegistry(logger, {
       providerOverrides: {
         claude: {
@@ -1508,14 +1488,8 @@ describe("model merging", () => {
       force: false,
     });
 
-    expect(models.find((model) => model.id === "custom-defaults")).toMatchObject(
-      CLAUDE_CUSTOM_THINKING_FIELDS,
-    );
-    expect(
-      models
-        .find((model) => model.id === "claude-sonnet-5")
-        ?.thinkingOptions?.map((option) => option.id),
-    ).toEqual(["off", "low", "medium", "high", "xhigh", "max", "ultracode"]);
+    expect(models.find((model) => model.id === "custom-defaults")?.thinkingOptions).toBeUndefined();
+    expect(models.find((model) => model.id === "claude-sonnet-5")?.thinkingOptions).toBeUndefined();
     expect(models.find((model) => model.id === "claude-opus-5")?.thinkingOptions).toEqual([]);
     expect(models.find((model) => model.id === "custom-explicit")).toMatchObject({
       thinkingOptions: [{ id: "bespoke", label: "Bespoke", isDefault: true }],
@@ -1621,7 +1595,6 @@ describe("model merging", () => {
         id: "claude-fable-5[1m]",
         label: "Gateway Fable 5",
         isSelectable: true,
-        defaultThinkingOptionId: "high",
       }),
     ]);
   });

@@ -1,5 +1,3 @@
-import { findClaudeModel } from "../models.js";
-
 export interface ClaudeSubagentUsage {
   totalTokens?: number;
 }
@@ -17,7 +15,7 @@ export function buildClaudeSubagentSubtitle(
 ): string | undefined {
   const parts = [
     readPart(facts.title),
-    formatModel(facts.model),
+    readPart(facts.model),
     formatEffort(facts.effort),
     formatTokens(facts.usage?.totalTokens),
   ].filter((part): part is string => part !== undefined);
@@ -27,12 +25,6 @@ export function buildClaudeSubagentSubtitle(
 function readPart(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function formatModel(modelId: string | undefined): string | undefined {
-  const normalized = readPart(modelId);
-  if (!normalized) return undefined;
-  return findClaudeModel(normalized)?.label ?? normalized;
 }
 
 function formatEffort(effort: string | undefined): string | undefined {

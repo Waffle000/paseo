@@ -1,8 +1,10 @@
+import type { AgentMetadata } from "@getpaseo/protocol/agent-types";
 import { i18n } from "@/i18n/i18next";
 
 interface ControlLabelInput {
   id: string;
   label?: string | null;
+  metadata?: AgentMetadata;
 }
 
 function sentenceCase(value: string): string {
@@ -33,6 +35,10 @@ export function formatAgentModeLabel(mode: ControlLabelInput): string {
 }
 
 export function formatThinkingOptionLabel(option: ControlLabelInput): string {
+  if (option.metadata?.source === "claude-code-disk-cache" && option.label != null) {
+    return option.label;
+  }
+
   const rawLabel = (option.label ?? option.id).trim();
   const compactLabel = rawLabel.replace(/[\s_-]+/g, "").toLowerCase();
 

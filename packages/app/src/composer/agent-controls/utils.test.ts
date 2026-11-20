@@ -217,6 +217,28 @@ describe("resolveAgentModelSelection", () => {
     expect(selection.displayThinking).toBe("Extra high");
   });
 
+  it.each([
+    { id: "xhigh", label: "Extra" },
+    { id: "off", label: "No thinking" },
+  ])("shows the native Claude label $label for the selected effort", ({ id, label }) => {
+    const selection = resolveAgentModelSelection({
+      models: [
+        {
+          id: "native-model",
+          provider: "claude",
+          label: "Native model",
+          thinkingOptions: [{ id, label, metadata: { source: "claude-code-disk-cache" } }],
+        },
+      ],
+      runtimeModelId: "native-model",
+      configuredModelId: null,
+      runtimeThinkingOptionId: id,
+      explicitThinkingOptionId: null,
+    });
+
+    expect(selection.displayThinking).toBe(label);
+  });
+
   it("falls back to the provider default model label instead of Auto", () => {
     const selection = resolveAgentModelSelection({
       models: [

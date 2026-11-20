@@ -17,6 +17,7 @@
 - Added per-account 9router quota cards from the Quota Tracker endpoints, with actual percentages, reset times, account status, and shared-model grouping. Replaced the earlier aggregate traffic/cost source; local CLI authentication stays server-side and refresh never invokes quota-reset or credit-spending actions.
 - Added a bundled offline draw.io viewer/editor for desktop `.drawio`/`.dio` file tabs and agent links, with multi-page/compressed diagram support and a shared XML source buffer.
 - Reused autosave, dirty-tab and external-change conflict handling for diagram edits; isolated the editor from the app origin and blocked external navigation/resource loads.
+- Replaced the curated Claude model list with the signed-in Claude Code profile's native disk catalog. Model discovery and availability no longer launch Claude; model order, labels, effort options, aliases and context limits follow the local snapshot, including new model IDs such as Fable 5.2. Removed invented Ultra Code choices and preserved native effort labels in selectors.
 
 ## 0.13.0-beta.1 - 2026-10-22
 

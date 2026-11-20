@@ -3,6 +3,36 @@ import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import { collectSessionTurnEvents } from "../test-utils/session-stream-adapter.js";
 import { ClaudeAgentClient } from "./agent.js";
 import type { ClaudeQueryFactory } from "./query.js";
+import type { ClaudeNativeCatalog } from "./native-catalog.js";
+
+function contextCatalog(
+  windows: Record<string, number>,
+  aliases: Record<string, string> = {},
+): ClaudeNativeCatalog {
+  return {
+    models: Object.entries(windows).map(([id, contextWindowMaxTokens]) => ({
+      provider: "claude",
+      id,
+      label: id,
+      contextWindowMaxTokens,
+    })),
+    rows: new Map(
+      Object.entries(windows).map(([id, max_input_tokens]) => [
+        id,
+        { id, runtime: { max_input_tokens } },
+      ]),
+    ),
+    cacheKey: "context-native-cache",
+    surface: "cc",
+    fetchedAt: 1,
+    staleAt: 2,
+    stale: false,
+    state: {},
+    aliases,
+    providerAliasTargets: {},
+    settingsVocabulary: {},
+  };
+}
 
 // A query dependency that speaks the same stream interface as Claude Code.
 // Each request repeats init so a second turn exercises runtime-limit retention.
@@ -79,15 +109,17 @@ function contextQuery({
 }
 
 test.each([
-  { selected: "glm-5.2[1m]", runtime: "glm-5.2[1m]", expected: 1_000_000 },
-  { selected: "sonnet", runtime: "glm-5.2[1m]", expected: 1_000_000 },
-  { selected: "glm-5.2", runtime: "glm-5.2", expected: undefined },
+  { selected: "glm-5.2[1m]", runtime: "glm-5.2[1m]", expected: 750_000 },
+  { selected: "sonnet", runtime: "glm-5.2[1m]", expected: 750_000 },
+  { selected: "uncataloged[1m]", runtime: "uncataloged[1m]", expected: undefined },
 ])(
   "streams the context limit for $selected resolved as $runtime",
   async ({ selected, runtime, expected }) => {
     const client = new ClaudeAgentClient({
       logger: createTestLogger(),
       queryFactory: contextQuery({ runtimeModel: runtime, reportedLimit: 800_000 }),
+      readCatalog: async () =>
+        contextCatalog({ "glm-5.2[1m]": 750_000 }, { sonnet: "glm-5.2[1m]" }),
       resolveBinary: async () => process.execPath,
     });
     const session = await client.createSession({
@@ -133,6 +165,7 @@ test("completed turns use the active model's window after switching both ways", 
   const client = new ClaudeAgentClient({
     logger: createTestLogger(),
     resolveBinary: async () => process.execPath,
+    readCatalog: async () => contextCatalog({ [haiku]: 200_000, [opus]: 1_000_000 }),
     queryFactory: contextQuery({
       runtimeModel: haiku,
       reportedLimit: 200_000,
@@ -197,6 +230,7 @@ test.each([
   const client = new ClaudeAgentClient({
     logger: createTestLogger(),
     resolveBinary: async () => process.execPath,
+    readCatalog: async () => contextCatalog({ "claude-haiku-4-5": 200_000 }),
     queryFactory: contextQuery({
       runtimeModel: model,
       reportedLimit: expected,
@@ -210,6 +244,38 @@ test.each([
       expect.objectContaining({
         type: "turn_completed",
         usage: expect.objectContaining({ contextWindowMaxTokens: expected }),
+      }),
+    );
+  } finally {
+    await session.close();
+  }
+});
+
+test("does not infer a context limit from an uncached model name", async () => {
+  const client = new ClaudeAgentClient({
+    logger: createTestLogger(),
+    resolveBinary: async () => process.execPath,
+    readCatalog: async () => {
+      throw new Error("Native catalog missing");
+    },
+    queryFactory: contextQuery({ runtimeModel: "claude-opus-4-8[1m]", reportedLimit: 800_000 }),
+  });
+  const session = await client.createSession({
+    provider: "claude",
+    cwd: process.cwd(),
+    model: "claude-opus-4-8[1m]",
+  });
+  try {
+    const events = await collectSessionTurnEvents(session, "OK");
+    expect(
+      events
+        .filter((event) => event.type === "usage_updated")
+        .map((event) => event.usage.contextWindowMaxTokens),
+    ).toEqual([undefined, undefined]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn_completed",
+        usage: expect.objectContaining({ contextWindowMaxTokens: 800_000 }),
       }),
     );
   } finally {

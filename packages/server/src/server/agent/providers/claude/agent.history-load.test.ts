@@ -34,7 +34,6 @@ describe("ClaudeAgentSession persisted history load", () => {
       queryFactory: vi.fn(() => {
         throw new Error("history load must not start a query");
       }),
-      resolveVersion: async () => "2.1.220",
     });
     const session = await client.resumeSession(
       { provider: "claude", sessionId: SESSION_ID },

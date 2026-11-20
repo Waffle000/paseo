@@ -51,6 +51,7 @@ import type {
   AgentMode,
   AgentModelDefinition,
   AgentProvider,
+  AgentSelectOption,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import {
@@ -93,10 +94,7 @@ import {
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 
-interface AgentControlOption {
-  id: string;
-  label: string;
-}
+type AgentControlOption = AgentSelectOption;
 
 type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
 
@@ -264,11 +262,22 @@ function toComboboxOptions(options: AgentControlOption[] | undefined): ComboboxO
   return (options ?? []).map((o) => ({ id: o.id, label: o.label }));
 }
 
-function toThinkingControlOptions(options: AgentControlOption[] | undefined): AgentControlOption[] {
-  return (options ?? []).map((option) => ({
-    id: option.id,
-    label: formatThinkingOptionLabel(option),
-  }));
+function toThinkingControlOptions(
+  options: AgentControlOption[] | null | undefined,
+): AgentControlOption[] {
+  return (options ?? []).map((option) => {
+    const label = formatThinkingOptionLabel(option);
+    if (label === option.label) {
+      return option;
+    }
+    return {
+      id: option.id,
+      label,
+      description: option.description,
+      isDefault: option.isDefault,
+      metadata: option.metadata,
+    };
+  });
 }
 
 /**
@@ -1612,12 +1621,10 @@ export const AgentControls = memo(function AgentControls({
     return (models ?? []).map((model) => ({ id: model.id, label: model.label }));
   }, [models]);
 
-  const thinkingOptions = useMemo<AgentControlOption[]>(() => {
-    return (modelSelection.thinkingOptions ?? []).map((option) => ({
-      id: option.id,
-      label: formatThinkingOptionLabel(option),
-    }));
-  }, [modelSelection.thinkingOptions]);
+  const thinkingOptions = useMemo(
+    () => toThinkingControlOptions(modelSelection.thinkingOptions),
+    [modelSelection.thinkingOptions],
+  );
 
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
